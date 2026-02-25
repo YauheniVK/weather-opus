@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && npm install 2>&1)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && npm run dev 2>&1)",
+      "Bash(curl:*)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && npm run build 2>&1)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && node -e \"const nt = require\\('next-themes'\\); console.log\\('next-themes exports:', Object.keys\\(nt\\)\\);\" 2>&1)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && node -e \"const s = require\\('sonner'\\); console.log\\('sonner exports:', Object.keys\\(s\\)\\);\" 2>&1)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && node -e \"\nconst lr = require\\('lucide-react'\\);\nconst icons = ['AlertCircle','ArrowLeftRight','Ban','Check','ChevronDown','ChevronRight','ChevronUp','Chrome','Circle','CloudSun','Crown','Droplets','Home','Loader2','Lock','MapPin','Moon','Search','Shield','Sparkles','Sun','TrendingUp','Users','X','Zap','ChevronLeft','Navigation','Eye','Gauge','Wind','Thermometer','Sunrise','Sunset','RefreshCw','CheckCircle','User','ArrowLeft','LayoutDashboard','CreditCard','LogOut','Loader2'];\nicons.forEach\\(name => {\n  if \\(!lr[name]\\) console.log\\('MISSING:', name\\);\n  else console.log\\('OK:', name\\);\n}\\);\n\" 2>&1)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && node -e \"\nconst { Slot } = require\\('@radix-ui/react-slot'\\);\nconsole.log\\('Slot type:', typeof Slot\\);\nconsole.log\\('Slot:', Slot ? 'defined' : 'UNDEFINED'\\);\n\" 2>&1)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && node -e \"\nconst { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } = require\\('@radix-ui/react-dropdown-menu'\\);\nconst checks = { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger };\nObject.entries\\(checks\\).forEach\\(\\([k,v]\\) => console.log\\(k + ':', v ? 'OK' : 'UNDEFINED'\\)\\);\n\" 2>&1)",
+      "Bash(tail:*)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && node -e \"\ntry {\n  const { createBrowserClient } = require\\('@supabase/ssr'\\);\n  console.log\\('createBrowserClient:', typeof createBrowserClient\\);\n} catch\\(e\\) {\n  console.log\\('ERROR:', e.message\\);\n}\n\" 2>&1)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && node -e \"\n// Simulate what providers.tsx does during SSR\nconst React = require\\('react'\\);\nconst { ThemeProvider } = require\\('next-themes'\\);\nconst { Toaster } = require\\('sonner'\\);\nconsole.log\\('ThemeProvider:', typeof ThemeProvider\\);\nconsole.log\\('Toaster:', typeof Toaster\\);\n\n// Check if rendering works\nconst { renderToString } = require\\('react-dom/server'\\);\ntry {\n  const el = React.createElement\\(ThemeProvider, { attribute: 'class' }, 'test'\\);\n  const html = renderToString\\(el\\);\n  console.log\\('ThemeProvider renders OK'\\);\n} catch\\(e\\) {\n  console.log\\('ThemeProvider render ERROR:', e.message\\);\n}\n\" 2>&1)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && node -e \"\nconst React = require\\('react'\\);\nconst { Toaster } = require\\('sonner'\\);\nconsole.log\\('Toaster:', Toaster\\);\nconsole.log\\('typeof:', typeof Toaster\\);\nconsole.log\\('keys:', Object.keys\\(Toaster || {}\\)\\);\nconsole.log\\('React type:', Toaster && Toaster.$$typeof ? String\\(Toaster.$$typeof\\) : 'none'\\);\n\n// Try to render it\nconst { renderToString } = require\\('react-dom/server'\\);\ntry {\n  const el = React.createElement\\(Toaster, null\\);\n  const html = renderToString\\(el\\);\n  console.log\\('Toaster renders OK, html length:', html.length\\);\n} catch\\(e\\) {\n  console.log\\('Toaster render ERROR:', e.message\\);\n}\n\" 2>&1)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && node -e \"\nconst React = require\\('react'\\);\nconst { Toaster } = require\\('sonner'\\);\nconsole.log\\('Toaster type:', typeof Toaster\\);\nconsole.log\\('Toaster keys:', JSON.stringify\\(Object.keys\\(Toaster || {}\\)\\)\\);\n\nconst { renderToString } = require\\('react-dom/server'\\);\ntry {\n  const el = React.createElement\\(Toaster, null\\);\n  const html = renderToString\\(el\\);\n  console.log\\('Toaster renders OK'\\);\n} catch\\(e\\) {\n  console.log\\('Toaster render ERROR:', e.message\\);\n}\n\" 2>&1)",
+      "Bash(cd /c/Users/Yauheni/VIBE/weather-opus && node -e \"\nprocess.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';\nprocess.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test';\n\nconst React = require\\('react'\\);\nconst { renderToString } = require\\('react-dom/server'\\);\nconst { ThemeProvider } = require\\('next-themes'\\);\nconst { Toaster } = require\\('sonner'\\);\n\n// Simulate what Providers renders\ntry {\n  const el = React.createElement\\(ThemeProvider, { attribute: 'class', defaultTheme: 'dark' },\n    React.createElement\\('div', null, 'test'\\),\n    React.createElement\\(Toaster, { position: 'top-right' }\\)\n  \\);\n  const html = renderToString\\(el\\);\n  console.log\\('Combined render OK'\\);\n} catch\\(e\\) {\n  console.log\\('Combined render ERROR:', e.message\\);\n  console.log\\(e.stack\\);\n}\n\" 2>&1)",
+      "Bash(find C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus:*)",
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && npm run build 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && npm run dev 2>&1)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd:*)",
+      "Bash(powershell:*)",
+      "Bash(node:*)",
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && rm -rf .next && npm run dev 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && npm install leaflet react-leaflet @types/leaflet 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && npm install leaflet react-leaflet@4 @types/leaflet 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && npx tsc --noEmit 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && git init && git add types/index.ts app/api/weather/route.ts app/api/weather/tile/route.ts components/weather/weather-search.tsx components/weather/weather-map.tsx app/dashboard/page.tsx next.config.js package.json package-lock.json 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && git add . 2>&1)"
+    ]
+  }
+}
