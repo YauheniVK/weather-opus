@@ -48,6 +48,28 @@ export interface ForecastDay {
   pop: number;
 }
 
+// ─── Geolocation ──────────────────────────────────────────────────────────────
+export interface GeolocationData {
+  ip: string;
+  city: string;
+  country: string;
+  countryCode: string;
+  lat: number;
+  lon: number;
+  timezone: string;
+}
+
+// ─── NASA ─────────────────────────────────────────────────────────────────────
+export interface NASAApodData {
+  date: string;
+  title: string;
+  explanation: string;
+  url: string;
+  hdurl?: string;
+  media_type: "image" | "video";
+  copyright?: string;
+}
+
 // ─── Currency ─────────────────────────────────────────────────────────────────
 export interface CurrencyRate {
   Cur_ID: number;
