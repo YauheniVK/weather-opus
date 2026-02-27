@@ -553,7 +553,9 @@ export function SolarSystemMap({
                     r={sizeMode === 15
                       ? (planet.nameEn === "Jupiter" ? 6 : planet.nameEn === "Saturn" ? 5 : 3.5)
                       : sizeMode === 5
-                        ? (planet.nameEn === "Jupiter" ? 3 : 2)
+                        ? (planet.nameEn === "Jupiter" ? 6
+                            : planet.nameEn === "Saturn" || planet.nameEn === "Uranus" || planet.nameEn === "Neptune" ? 3.5
+                            : 2 /* Earth group unchanged */)
                         : /* ×1 — gas giants match Log ×1 */
                           (planet.nameEn === "Jupiter" ? 3
                             : planet.nameEn === "Saturn" || planet.nameEn === "Uranus" || planet.nameEn === "Neptune" ? 2
@@ -570,9 +572,10 @@ export function SolarSystemMap({
                     />
                   )}
                   {planet.nameEn === "Saturn" && sizeMode === 5 && (
-                    <line
-                      x1={CX + r} y1={CY - 5} x2={CX + r} y2={CY + 5}
-                      stroke={planet.color} strokeWidth="1.2" strokeOpacity="0.75"
+                    <ellipse
+                      cx={CX + r} cy={CY}
+                      rx={9} ry={1.8}
+                      fill="none" stroke="#E4D191" strokeWidth="1.4" strokeOpacity="0.65"
                     />
                   )}
                   {planet.nameEn === "Saturn" && sizeMode === 1 && (
