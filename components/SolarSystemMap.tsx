@@ -551,7 +551,7 @@ export function SolarSystemMap({
                   <circle
                     cx={CX + r} cy={CY}
                     r={sizeMode === 15
-                      ? (planet.nameEn === "Jupiter" ? 6 : planet.nameEn === "Saturn" ? 5 : 3.5)
+                      ? (planet.nameEn === "Jupiter" ? 12 : planet.nameEn === "Saturn" || planet.nameEn === "Uranus" || planet.nameEn === "Neptune" ? 7 : 3.5 /* Earth group unchanged */)
                       : sizeMode === 5
                         ? (planet.nameEn === "Jupiter" ? 6
                             : planet.nameEn === "Saturn" || planet.nameEn === "Uranus" || planet.nameEn === "Neptune" ? 3.5
@@ -567,8 +567,8 @@ export function SolarSystemMap({
                   {planet.nameEn === "Saturn" && sizeMode === 15 && (
                     <ellipse
                       cx={CX + r} cy={CY}
-                      rx={11} ry={2.2}
-                      fill="none" stroke="#E4D191" strokeWidth="1.5" strokeOpacity="0.65"
+                      rx={18} ry={3.6}
+                      fill="none" stroke="#E4D191" strokeWidth="2" strokeOpacity="0.65"
                     />
                   )}
                   {planet.nameEn === "Saturn" && sizeMode === 5 && (
