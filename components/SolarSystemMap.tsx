@@ -208,11 +208,11 @@ export function SolarSystemMap({
   /** Effective planet dot radius for the current size mode (log scale). */
   function eSize(planet: Planet): number {
     if (sizeMode === 1) {
-      // Gas giants: same apparent size as ×5 so Saturn rings and Jupiter bands still show.
-      // Inner planets: tiny but Earth is slightly fatter for readability.
-      if (planet.nameEn === "Jupiter")                               return 8;
-      if (planet.nameEn === "Saturn")                                return 7;
-      if (planet.nameEn === "Uranus" || planet.nameEn === "Neptune") return 5;
+      // Mirror Linear ×5 exactly: Jupiter=3, Saturn=2 (+ line), Uranus/Neptune=2.
+      // Earth slightly fatter than the rest for readability.
+      if (planet.nameEn === "Jupiter")                               return 3;
+      if (planet.nameEn === "Saturn")                                return 2;
+      if (planet.nameEn === "Uranus" || planet.nameEn === "Neptune") return 2;
       if (planet.nameEn === "Earth")                                 return 2.5;
       if (planet.nameEn === "Venus"  || planet.nameEn === "Mars")    return 2;
       return 1.5; // Mercury
@@ -511,8 +511,8 @@ export function SolarSystemMap({
 
               {scale === "log" ? (
                 <>
-                  {/* Saturn rings — shown whenever es ≥ 5 (×1 gas-giant size and above) */}
-                  {es >= 5 && planet.nameEn === "Saturn" && (
+                  {/* Saturn: ellipse ring when es≥5 (×5 and ×15), line when es<5 (×1) */}
+                  {planet.nameEn === "Saturn" && es >= 5 && (
                     <ellipse
                       cx={CX + r} cy={CY}
                       rx={es * 2.2} ry={es * 0.45}
@@ -520,6 +520,12 @@ export function SolarSystemMap({
                     />
                   )}
                   <circle cx={CX + r} cy={CY} r={es} fill={planet.color} />
+                  {planet.nameEn === "Saturn" && es < 5 && (
+                    <line
+                      x1={CX + r} y1={CY - 5} x2={CX + r} y2={CY + 5}
+                      stroke={planet.color} strokeWidth="1.2" strokeOpacity="0.75"
+                    />
+                  )}
                   {/* Jupiter bands + red spot — shown whenever es ≥ 5 */}
                   {es >= 5 && planet.nameEn === "Jupiter" && (
                     <>
