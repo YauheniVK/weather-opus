@@ -588,9 +588,15 @@ export function SolarSystemMap({
               )}
               <circle cx={vx} cy={vy} r={vDotR}  fill="#FF6B6B" />
               <circle cx={vx} cy={vy} r={vGlowR} fill="rgba(255,107,107,0.2)" />
-              <text x={vx + 10} y={vy + 4} fill="rgba(255,107,107,0.8)" fontSize="13" fontFamily="monospace">
-                {voyager.name}
-              </text>
+              {/* Label only after passing Neptune (linear) or Saturn (log) */}
+              {(scale === "linear"
+                ? (realPt ?? voyager).distance > 30.07
+                : (realPt ?? voyager).distance > 9.537
+              ) && (
+                <text x={vx + 10} y={vy + 4} fill="rgba(255,107,107,0.8)" fontSize="13" fontFamily="monospace">
+                  {voyager.name}
+                </text>
+              )}
               <circle
                 cx={vx} cy={vy} r={14}
                 fill="transparent"
