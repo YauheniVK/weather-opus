@@ -40,16 +40,18 @@ const HELIOSPHERE_ZONES = [
   { au: 120, label: "Гелиопауза",  stroke: "rgba(147,197,253,0.28)", textFill: "rgba(147,197,253,0.65)" },
 ];
 
-// Scale chain: outer → inner; the outermost visible item fills VOYAGER_R in linear mode
-const SCALE_CHAIN = [
-  { au: 120,   nameEn: "Heliopause" },
-  { au: 85,    nameEn: "TermShock"  },
-  { au: 30.07, nameEn: "Neptune"    },
-  { au: 19.19, nameEn: "Uranus"     },
-  { au: 9.537, nameEn: "Saturn"     },
-  { au: 5.203, nameEn: "Jupiter"    },
-  { au: 1.524, nameEn: "Mars"       },
+// Linear scale options — selected one sets effectiveMaxAU
+const SCALE_OPTIONS = [
+  { key: "voyagers",   label: "Зонды сегодня", au: 170   },
+  { key: "heliopause", label: "Гелиопауза",    au: 120   },
+  { key: "termshock",  label: "Терм. удар",    au: 85    },
+  { key: "neptune",    label: "Нептун",        au: 30.07 },
+  { key: "uranus",     label: "Уран",          au: 19.19 },
+  { key: "saturn",     label: "Сатурн",        au: 9.537 },
+  { key: "jupiter",    label: "Юпитер",        au: 5.203 },
+  { key: "mars",       label: "Марс",          au: 1.524 },
 ] as const;
+type ScaleKey = typeof SCALE_OPTIONS[number]["key"];
 
 // ─── Deterministic stars — all minimum size (r=0.5, sub-pixel) ───────────────
 const STAR_DATA = Array.from({ length: 200 }, (_, i) => {
@@ -150,59 +152,22 @@ export function SolarSystemMap({
   const [scale,    setScale]    = useState<"log" | "linear">("log");
   const [sizeMode, setSizeMode] = useState<1 | 5 | 15>(5);
 
-  // ── Linear outer-object visibility (drives both rendering AND scale) ─────
-  const [showVoyagersLin, setShowVoyagersLin] = useState(true);
-  const [showHeliopause,  setShowHeliopause]  = useState(true);
-  const [showTermShock,   setShowTermShock]   = useState(true);
-  const [showNeptune,     setShowNeptune]     = useState(true);
-  const [showUranus,      setShowUranus]      = useState(true);
-  const [showSaturn,      setShowSaturn]      = useState(true);
-  const [showJupiter,     setShowJupiter]     = useState(true);
-  const [showMarsLin,     setShowMarsLin]     = useState(true);
+  // ── Linear scale selector ─────────────────────────────────────────────────
+  const [scaleKey, setScaleKey] = useState<ScaleKey>("heliopause");
 
-  // ── Linear scale computation ──────────────────────────────────────────────
-  // Voyagers + Heliopause are visual-only: toggling them does NOT change scale.
-  // Scale only changes when TermShock and all items outside it are off.
-  const effectiveMaxAU = (() => {
-    if (scale !== "linear") return 30.07; // irrelevant for log mode
-    if (showTermShock || showHeliopause || showVoyagersLin) return 120; // heliosphere / voyagers → base scale
-    if (showNeptune)  return 30.07;
-    if (showUranus)   return 19.19;
-    if (showSaturn)   return 9.537;
-    if (showJupiter)  return 5.203;
-    if (showMarsLin)  return 1.524;
-    return 1.524;
-  })();
+  const effectiveMaxAU = scale === "linear"
+    ? (SCALE_OPTIONS.find((o) => o.key === scaleKey)?.au ?? 120)
+    : 30.07; // irrelevant for log mode
 
   const linPxPerAU = VOYAGER_R / effectiveMaxAU;
 
-  // Key of the item currently acting as scale reference (for the ◀ indicator)
-  const activeScaleKey = (() => {
-    if (scale !== "linear") return null;
-    if (showTermShock || showHeliopause || showVoyagersLin)
-      return showHeliopause ? "heliopause" : showTermShock ? "termShock" : "voyagersLin";
-    if (showNeptune)  return "neptune";
-    if (showUranus)   return "uranus";
-    if (showSaturn)   return "saturn";
-    if (showJupiter)  return "jupiter";
-    if (showMarsLin)  return "mars";
-    return null;
-  })();
+  // Heliosphere zone rings — shown when scale includes them
+  const linShowHeliopause = effectiveMaxAU >= 120;
+  const linShowTermShock  = effectiveMaxAU >= 85;
 
   /** Scale-aware orbit radius (px from centre). */
   function scaledR(distAU: number): number {
     return scale === "linear" ? distAU * linPxPerAU : orbitRadius(distAU);
-  }
-
-  /** In linear mode, hide planets whose checkbox is unchecked. */
-  function linPlanetVisible(nameEn: string): boolean {
-    if (scale !== "linear") return true;
-    if (nameEn === "Neptune") return showNeptune;
-    if (nameEn === "Uranus")  return showUranus;
-    if (nameEn === "Saturn")  return showSaturn;
-    if (nameEn === "Jupiter") return showJupiter;
-    if (nameEn === "Mars")    return showMarsLin;
-    return true;
   }
 
   /** Effective planet dot radius for the current size mode (log scale). */
@@ -318,8 +283,8 @@ export function SolarSystemMap({
     }).join(" ");
   }
 
-  // Voyager visibility per mode
-  const voyVisible = scale === "linear" ? showVoyagersLin : showVoyagers;
+  // Voyager visibility — single toggle for both modes (right panel "Зонды")
+  const voyVisible = showVoyagers;
 
   return (
     <div ref={wrapperRef} className="relative w-full" style={{ aspectRatio: `${SVG_SIZE} / ${SVG_H}` }}>
@@ -400,9 +365,9 @@ export function SolarSystemMap({
           <circle key={i} cx={s.px} cy={s.py} r={0.5} fill="white" opacity={s.op} />
         ))}
 
-        {/* ── Heliosphere zones (linear mode, individually toggled) ─────── */}
+        {/* ── Heliosphere zones (linear mode, shown when scale includes them) ── */}
         {scale === "linear" && HELIOSPHERE_ZONES.map(({ au, label, stroke, textFill }) => {
-          const show = au === 85 ? showTermShock : showHeliopause;
+          const show = au === 85 ? linShowTermShock : linShowHeliopause;
           if (!show) return null;
           const r  = au * linPxPerAU;
           const lx = +(CX + (r + 16) * 0.7071).toFixed(1);
@@ -425,7 +390,6 @@ export function SolarSystemMap({
 
         {/* ── Orbit rings — visual ─────────────────────────────────────── */}
         {PLANETS.map((planet) => {
-          if (!linPlanetVisible(planet.nameEn)) return null;
           const r         = scaledR(planet.distance);
           const isHovered = hoveredPlanet === planet.nameEn;
           if (scale === "linear" && r < MIN_ORBIT_PX) return null;
@@ -443,7 +407,6 @@ export function SolarSystemMap({
 
         {/* ── Orbit rings — hit areas ───────────────────────────────────── */}
         {PLANETS.map((planet) => {
-          if (!linPlanetVisible(planet.nameEn)) return null;
           const r = scaledR(planet.distance);
           if (scale === "linear" && r < MIN_ORBIT_PX) return null;
           return (
@@ -484,7 +447,6 @@ export function SolarSystemMap({
 
         {/* ── Planets ──────────────────────────────────────────────────── */}
         {PLANETS.map((planet) => {
-          if (!linPlanetVisible(planet.nameEn)) return null;
           const r      = scaledR(planet.distance);
           const dur    = ANIM_DURATIONS[planet.nameEn] ?? 60;
           const angle  = resolvePlanetAngle(planet.nameEn);
@@ -682,48 +644,23 @@ export function SolarSystemMap({
         </div>
       </div>
 
-      {/* ── Linear scale panel — bottom-left ─────────────────────────────── */}
+      {/* ── Linear scale selector — bottom-left ──────────────────────────── */}
       {scale === "linear" && (
         <div className="absolute bottom-2 left-2 z-20 flex flex-col rounded-lg border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-sm">
-          {/* Voyagers — can determine scale when heliosphere zones are off */}
-          <label className="flex cursor-pointer select-none items-center gap-1.5 py-0.5 mb-1 pb-1.5 border-b border-white/10">
-            <span className={`text-[8px] leading-none transition-colors ${activeScaleKey === "voyagersLin" ? "text-blue-400" : "text-transparent"}`}>◀</span>
-            <span className={`flex-1 text-right text-[10px] whitespace-nowrap transition-colors ${activeScaleKey === "voyagersLin" ? "text-blue-300" : "text-white/55"}`}>
-              Вояджеры
-            </span>
-            <input
-              type="checkbox"
-              checked={showVoyagersLin}
-              onChange={(e) => setShowVoyagersLin(e.target.checked)}
-              className="h-3 w-3 flex-shrink-0 accent-blue-400"
-            />
-          </label>
-
-          {/* Scale chain items — outermost visible one determines scale */}
-          {([
-            { key: "heliopause", label: "Гелиопауза", val: showHeliopause, set: setShowHeliopause },
-            { key: "termShock",  label: "Терм. удар",  val: showTermShock,  set: setShowTermShock  },
-            { key: "neptune",    label: "Нептун",      val: showNeptune,    set: setShowNeptune    },
-            { key: "uranus",     label: "Уран",        val: showUranus,     set: setShowUranus     },
-            { key: "saturn",     label: "Сатурн",      val: showSaturn,     set: setShowSaturn     },
-            { key: "jupiter",    label: "Юпитер",      val: showJupiter,    set: setShowJupiter    },
-            { key: "mars",       label: "Марс",        val: showMarsLin,    set: setShowMarsLin    },
-          ] as const).map(({ key, label, val, set }) => {
-            const isActive = key === activeScaleKey;
+          <p className="text-[9px] uppercase tracking-widest text-white/30 mb-1.5 text-center">Масштаб</p>
+          {SCALE_OPTIONS.map(({ key, label }) => {
+            const active = key === scaleKey;
             return (
-              <label key={key} className="flex cursor-pointer select-none items-center gap-1.5 py-0.5">
-                {/* scale indicator dot */}
-                <span className={`text-[8px] leading-none transition-colors ${isActive ? "text-blue-400" : "text-transparent"}`}>◀</span>
-                <span className={`flex-1 text-right text-[10px] whitespace-nowrap transition-colors ${isActive ? "text-blue-300" : "text-white/55"}`}>
+              <button
+                key={key}
+                onClick={() => setScaleKey(key)}
+                className="flex items-center gap-1.5 py-0.5 w-full text-left"
+              >
+                <span className={`text-[8px] leading-none transition-colors ${active ? "text-blue-400" : "text-transparent"}`}>●</span>
+                <span className={`text-[10px] whitespace-nowrap transition-colors ${active ? "text-blue-300" : "text-white/45 hover:text-white/70"}`}>
                   {label}
                 </span>
-                <input
-                  type="checkbox"
-                  checked={val}
-                  onChange={(e) => set(e.target.checked)}
-                  className="h-3 w-3 flex-shrink-0 accent-blue-400"
-                />
-              </label>
+              </button>
             );
           })}
         </div>
