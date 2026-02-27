@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import type { AnimationState } from "@/hooks/useAnimation";
 
 // ─── Speed options ─────────────────────────────────────────────────────────────
@@ -60,6 +61,18 @@ export function AnimationControls({ anim, disabled = false }: AnimationControlsP
     currentDate, isPlaying, speed, progress,
     play, pause, reset, setSpeed, seekToProgress,
   } = anim;
+
+  // Scrubbing: pause on drag start, resume on release if was playing
+  const wasPlayingRef = useRef(false);
+
+  const handleSliderDown = () => {
+    wasPlayingRef.current = isPlaying;
+    if (isPlaying) pause();
+  };
+
+  const handleSliderUp = () => {
+    if (wasPlayingRef.current) play();
+  };
 
   const handleSlider = (e: React.ChangeEvent<HTMLInputElement>) => {
     seekToProgress(Number(e.target.value));
@@ -123,6 +136,8 @@ export function AnimationControls({ anim, disabled = false }: AnimationControlsP
           step={0.01}
           value={progress}
           onChange={handleSlider}
+          onPointerDown={handleSliderDown}
+          onPointerUp={handleSliderUp}
           className="w-full h-1.5 accent-blue-500 cursor-pointer"
         />
       </div>
