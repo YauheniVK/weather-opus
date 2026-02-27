@@ -19,7 +19,7 @@ Full-stack Next.js 14+ web application with multiple feature modules:
 - **Database**: Supabase (PostgreSQL), single `profiles` table
 - **Payments**: Stripe Checkout + Webhooks
 - **UI**: Tailwind CSS + shadcn/ui components, next-themes, lucide-react, sonner
-- **APIs**: OpenWeatherMap, NBRB, NASA JPL Horizons
+- **APIs**: OpenWeatherMap, NBRB, NASA JPL Horizons, NASA DONKI
 
 ---
 
@@ -54,7 +54,8 @@ Full-stack Next.js 14+ web application with multiple feature modules:
 | `components/SpaceDashboard.tsx` | Main container, CSS starfield, phase state machine, Earth info block |
 | `components/SolarSystemMap.tsx` | SVG solar system visualization |
 | `components/VoyagerTracker.tsx` | Voyager 1 & 2 live distance/speed cards |
-| `components/SolarActivity.tsx` | Solar flares + geomagnetic storm panel |
+| `components/SolarActivity.tsx` | Solar flares + geomagnetic storm panel — client component, fetches /api/donki |
+| `app/api/donki/route.ts` | Server proxy to NASA DONKI (FLR + GST endpoints), revalidates every 15 min |
 | `components/DataLoader.tsx` | NASA JPL Horizons data fetch UI (terminal-style) |
 | `components/AnimationControls.tsx` | Playback controls for real-data animation |
 | `hooks/useAnimation.ts` | rAF animation loop, interpolation, seek |
@@ -169,6 +170,43 @@ Voyager 2: 290.68° @ 142.209 AU
 
 ---
 
+## NASA DONKI Integration
+
+### What it provides
+Real-time space weather data for the Solar Activity panel:
+- **Solar flares** (`/FLR`) — last 7 days, up to 5 most recent, sorted newest first
+- **Geomagnetic storms** (`/GST`) — current storm level derived from max Kp index
+
+### API endpoint
+`GET /api/donki` — no auth required, revalidates every 15 minutes
+
+### Storm level mapping
+| Kp index | Level | Color |
+|---|---|---|
+| < 5 | G0 | green |
+| 5 | G1 | yellow |
+| 6 | G2 | yellow |
+| 7 | G3 | red |
+| 8 | G4 | red |
+| 9 | G5 | red |
+
+### Response shape
+```ts
+{
+  flares:    [{ flareClass, time, region, duration }],
+  storm:     { level, description, color },
+  fetchedAt: string  // ISO timestamp, shown in UI as "NASA DONKI · HH:MM"
+}
+```
+
+### Behaviour
+- Shows skeleton animation while loading
+- Falls back to mock data (`lib/mockData.ts`) on fetch error — UI never breaks
+- Shows "Вспышек не зафиксировано" when no flares in last 7 days
+- Uses `NASA_API_KEY` env var; falls back to `DEMO_KEY` (30 req/hour limit)
+
+---
+
 ## Environment Variables
 
 ```
@@ -183,6 +221,7 @@ STRIPE_MONTHLY_PRICE_ID
 STRIPE_ANNUAL_PRICE_ID
 ADMIN_EMAILS
 NEXT_PUBLIC_APP_URL
+NASA_API_KEY          # optional — for DONKI; falls back to DEMO_KEY (rate-limited)
 ```
 
 ---
