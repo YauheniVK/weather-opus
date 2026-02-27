@@ -566,8 +566,8 @@ export function SolarSystemMap({
           const { vx, vy } = resolveVoyagerPos(voyager);
           const trailPts = buildTrailPoints(voyager.name);
           const realPt   = currentPositions?.get(voyager.name) ?? null;
-          const vDotR  = sizeMode === 15 ? 6 : sizeMode === 5 ? 5 : 2;
-          const vGlowR = sizeMode === 15 ? 11 : sizeMode === 5 ? 9 : 4;
+          const vDotR  = sizeMode === 15 ? 6 : sizeMode === 5 ? 3.5 : 2;
+          const vGlowR = sizeMode === 15 ? 11 : sizeMode === 5 ? 6   : 4;
 
           return (
             <g key={voyager.name}>
