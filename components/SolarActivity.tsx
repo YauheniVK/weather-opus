@@ -86,43 +86,53 @@ function FlareRow({ flare }: { flare: SolarFlare }) {
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-export function SolarActivity() {
-  const storm  = GEOMAGNETIC_STORM;
-  const styles = STORM_STYLES[storm.color];
-
+// ─── Flares panel ─────────────────────────────────────────────────────────────
+export function SolarFlares() {
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-semibold uppercase tracking-widest text-amber-400/70">
         Солнечная активность
       </h2>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* Flares list — spans 2 columns */}
-        <div className="lg:col-span-2 space-y-2">
-          <p className="text-xs text-white/40 mb-3">Последние вспышки</p>
-          {SOLAR_FLARES.map((flare, i) => (
-            <FlareRow key={i} flare={flare} />
-          ))}
-        </div>
-
-        {/* Geomagnetic storm card */}
-        <div className={`rounded-xl border ${styles.border} bg-white/5 p-5 flex flex-col justify-center space-y-3`}>
-          <p className="text-xs text-white/40 uppercase tracking-widest">Геомагнитная буря</p>
-
-          <div className="flex items-center gap-3">
-            <span className={`h-3 w-3 rounded-full ${styles.dot} shadow-lg`}
-                  style={{ boxShadow: `0 0 8px 2px currentColor` }} />
-            <span className={`text-3xl font-bold ${styles.text}`}>{storm.level}</span>
-          </div>
-
-          <p className={`text-sm font-medium ${styles.text}`}>{storm.description}</p>
-
-          <div className={`rounded-lg ${styles.badge} px-3 py-2 text-xs`}>
-            Уровень {storm.level} — умеренное воздействие на спутники и электросети
-          </div>
-        </div>
+      <p className="text-xs text-white/40">Последние вспышки</p>
+      <div className="space-y-2">
+        {SOLAR_FLARES.map((flare, i) => (
+          <FlareRow key={i} flare={flare} />
+        ))}
       </div>
+    </div>
+  );
+}
+
+// ─── Geomagnetic storm card ────────────────────────────────────────────────────
+export function GeomagneticStormCard() {
+  const storm  = GEOMAGNETIC_STORM;
+  const styles = STORM_STYLES[storm.color];
+
+  return (
+    <div className={`rounded-xl border ${styles.border} bg-white/5 p-5 flex flex-col justify-center space-y-3`}>
+      <p className="text-xs text-white/40 uppercase tracking-widest">Геомагнитная буря</p>
+
+      <div className="flex items-center gap-3">
+        <span className={`h-3 w-3 rounded-full ${styles.dot} shadow-lg`}
+              style={{ boxShadow: `0 0 8px 2px currentColor` }} />
+        <span className={`text-3xl font-bold ${styles.text}`}>{storm.level}</span>
+      </div>
+
+      <p className={`text-sm font-medium ${styles.text}`}>{storm.description}</p>
+
+      <div className={`rounded-lg ${styles.badge} px-3 py-2 text-xs`}>
+        Уровень {storm.level} — умеренное воздействие на спутники и электросети
+      </div>
+    </div>
+  );
+}
+
+// ─── Combined (legacy) ────────────────────────────────────────────────────────
+export function SolarActivity() {
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="lg:col-span-2"><SolarFlares /></div>
+      <GeomagneticStormCard />
     </div>
   );
 }
