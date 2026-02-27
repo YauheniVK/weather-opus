@@ -593,7 +593,12 @@ export function SolarSystemMap({
                 ? (realPt ?? voyager).distance > 30.07
                 : (realPt ?? voyager).distance > 9.537
               ) && (
-                <text x={vx + 10} y={vy + 4} fill="rgba(255,107,107,0.8)" fontSize="13" fontFamily="monospace">
+                <text
+                  x={voyager.name === "Voyager 1" ? vx - 10 : vx + 10}
+                  y={vy + 4}
+                  textAnchor={voyager.name === "Voyager 1" ? "end" : "start"}
+                  fill="rgba(255,107,107,0.8)" fontSize="13" fontFamily="monospace"
+                >
                   {voyager.name}
                 </text>
               )}
