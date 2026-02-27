@@ -148,7 +148,7 @@ export function SolarSystemMap({
 
   // ── Scale + size toggles ─────────────────────────────────────────────────
   const [scale,    setScale]    = useState<"log" | "linear">("log");
-  const [sizeMode, setSizeMode] = useState<1 | 5 | 20>(5);
+  const [sizeMode, setSizeMode] = useState<1 | 5 | 15>(5);
 
   // ── Linear outer-object visibility (drives both rendering AND scale) ─────
   const [showVoyagersLin, setShowVoyagersLin] = useState(true);
@@ -205,21 +205,26 @@ export function SolarSystemMap({
     return true;
   }
 
-  /** Effective planet dot radius for the current size mode. */
+  /** Effective planet dot radius for the current size mode (log scale). */
   function eSize(planet: Planet): number {
     if (sizeMode === 1) {
-      if (planet.nameEn === "Jupiter" || planet.nameEn === "Saturn") return 2.5;
-      if (planet.nameEn === "Uranus"  || planet.nameEn === "Neptune") return 2;
-      return 1.5;
+      // Gas giants: same apparent size as ×5 so Saturn rings and Jupiter bands still show.
+      // Inner planets: tiny but Earth is slightly fatter for readability.
+      if (planet.nameEn === "Jupiter")                               return 8;
+      if (planet.nameEn === "Saturn")                                return 7;
+      if (planet.nameEn === "Uranus" || planet.nameEn === "Neptune") return 5;
+      if (planet.nameEn === "Earth")                                 return 2.5;
+      if (planet.nameEn === "Venus"  || planet.nameEn === "Mars")    return 2;
+      return 1.5; // Mercury
     }
-    if (sizeMode === 20) {
-      if (planet.nameEn === "Jupiter")                               return 22;
-      if (planet.nameEn === "Saturn")                                return 18;
-      if (planet.nameEn === "Uranus" || planet.nameEn === "Neptune") return 12;
-      if (planet.nameEn === "Earth")                                 return 10;
-      if (planet.nameEn === "Venus")                                 return 9;
-      if (planet.nameEn === "Mars")                                  return 8;
-      return 7; // Mercury
+    if (sizeMode === 15) {
+      if (planet.nameEn === "Jupiter")                               return 16;
+      if (planet.nameEn === "Saturn")                                return 12;
+      if (planet.nameEn === "Uranus" || planet.nameEn === "Neptune") return 8;
+      if (planet.nameEn === "Earth")                                 return 7;
+      if (planet.nameEn === "Venus")                                 return 6;
+      if (planet.nameEn === "Mars")                                  return 5.5;
+      return 5; // Mercury
     }
     return planet.size; // ×5
   }
@@ -457,12 +462,12 @@ export function SolarSystemMap({
 
         {/* ── Sun ──────────────────────────────────────────────────────── */}
         {scale === "log" ? (
-          sizeMode === 20 ? (
+          sizeMode === 15 ? (
             <>
-              <circle cx={CX} cy={CY} r={52} fill="rgba(253,184,19,0.03)" />
-              <circle cx={CX} cy={CY} r={34} fill="rgba(253,184,19,0.07)" />
-              <circle cx={CX} cy={CY} r={22} fill="rgba(253,184,19,0.17)" />
-              <circle cx={CX} cy={CY} r={14} fill="#FDB813" />
+              <circle cx={CX} cy={CY} r={46} fill="rgba(253,184,19,0.03)" />
+              <circle cx={CX} cy={CY} r={30} fill="rgba(253,184,19,0.07)" />
+              <circle cx={CX} cy={CY} r={19} fill="rgba(253,184,19,0.17)" />
+              <circle cx={CX} cy={CY} r={12} fill="#FDB813" />
             </>
           ) : sizeMode === 5 ? (
             <>
@@ -474,7 +479,7 @@ export function SolarSystemMap({
             <circle cx={CX} cy={CY} r={5} fill="#FDB813" />
           )
         ) : (
-          <circle cx={CX} cy={CY} r={sizeMode === 1 ? 1.5 : sizeMode === 5 ? 2 : 4} fill="#FDB813" />
+          <circle cx={CX} cy={CY} r={sizeMode === 1 ? 1.5 : sizeMode === 5 ? 2 : 3.5} fill="#FDB813" />
         )}
 
         {/* ── Planets ──────────────────────────────────────────────────── */}
@@ -506,29 +511,32 @@ export function SolarSystemMap({
 
               {scale === "log" ? (
                 <>
-                  {sizeMode > 1 && planet.nameEn === "Saturn" && (
+                  {/* Saturn rings — shown whenever es ≥ 5 (×1 gas-giant size and above) */}
+                  {es >= 5 && planet.nameEn === "Saturn" && (
                     <ellipse
                       cx={CX + r} cy={CY}
-                      rx={planet.size * 2.4} ry={planet.size * 0.5}
-                      fill="none" stroke="#E4D191" strokeWidth="2.5" strokeOpacity="0.55"
+                      rx={es * 2.2} ry={es * 0.45}
+                      fill="none" stroke="#E4D191" strokeWidth="2" strokeOpacity="0.60"
                     />
                   )}
                   <circle cx={CX + r} cy={CY} r={es} fill={planet.color} />
-                  {sizeMode > 1 && planet.nameEn === "Jupiter" && (
+                  {/* Jupiter bands + red spot — shown whenever es ≥ 5 */}
+                  {es >= 5 && planet.nameEn === "Jupiter" && (
                     <>
                       <ellipse
-                        cx={CX + r} cy={CY + planet.size * 0.28}
-                        rx={planet.size * 0.9} ry={planet.size * 0.28}
+                        cx={CX + r} cy={CY + es * 0.28}
+                        rx={es * 0.9} ry={es * 0.28}
                         fill="rgba(100,55,18,0.45)"
                       />
                       <ellipse
-                        cx={CX + r + planet.size * 0.28} cy={CY + planet.size * 0.28}
-                        rx={planet.size * 0.28} ry={planet.size * 0.2}
+                        cx={CX + r + es * 0.28} cy={CY + es * 0.28}
+                        rx={es * 0.28} ry={es * 0.2}
                         fill="rgba(190,42,18,0.85)"
                       />
                     </>
                   )}
-                  {sizeMode > 1 && es >= 5 && (
+                  {/* Glow — only for large sizes */}
+                  {es >= 8 && (
                     <circle cx={CX + r} cy={CY} r={es + 3} fill={planet.color} opacity="0.15" />
                   )}
                 </>
@@ -536,19 +544,32 @@ export function SolarSystemMap({
                 <>
                   <circle
                     cx={CX + r} cy={CY}
-                    r={sizeMode === 20
-                      ? (planet.nameEn === "Jupiter" ? 7 : planet.nameEn === "Saturn" ? 6 : 4)
+                    r={sizeMode === 15
+                      ? (planet.nameEn === "Jupiter" ? 6 : planet.nameEn === "Saturn" ? 5 : 3.5)
                       : sizeMode === 5
                         ? (planet.nameEn === "Jupiter" ? 3 : 2)
                         : (planet.nameEn === "Jupiter" || planet.nameEn === "Saturn" ? 1.5 : 1)
                     }
                     fill={planet.color}
                   />
-                  {sizeMode > 1 && planet.nameEn === "Saturn" && (
+                  {/* Saturn: ellipse rings in ×15, line in ×5, tiny line in ×1 */}
+                  {planet.nameEn === "Saturn" && sizeMode === 15 && (
+                    <ellipse
+                      cx={CX + r} cy={CY}
+                      rx={11} ry={2.2}
+                      fill="none" stroke="#E4D191" strokeWidth="1.5" strokeOpacity="0.65"
+                    />
+                  )}
+                  {planet.nameEn === "Saturn" && sizeMode === 5 && (
                     <line
-                      x1={CX + r} y1={CY - 5}
-                      x2={CX + r} y2={CY + 5}
+                      x1={CX + r} y1={CY - 5} x2={CX + r} y2={CY + 5}
                       stroke={planet.color} strokeWidth="1.2" strokeOpacity="0.75"
+                    />
+                  )}
+                  {planet.nameEn === "Saturn" && sizeMode === 1 && (
+                    <line
+                      x1={CX + r} y1={CY - 2.5} x2={CX + r} y2={CY + 2.5}
+                      stroke={planet.color} strokeWidth="1" strokeOpacity="0.60"
                     />
                   )}
                 </>
@@ -571,8 +592,8 @@ export function SolarSystemMap({
           const { vx, vy } = resolveVoyagerPos(voyager);
           const trailPts = buildTrailPoints(voyager.name);
           const realPt   = currentPositions?.get(voyager.name) ?? null;
-          const vDotR  = sizeMode === 20 ? 8 : sizeMode === 5 ? 5 : 2;
-          const vGlowR = sizeMode === 20 ? 14 : sizeMode === 5 ? 9 : 4;
+          const vDotR  = sizeMode === 15 ? 6 : sizeMode === 5 ? 5 : 2;
+          const vGlowR = sizeMode === 15 ? 11 : sizeMode === 5 ? 9 : 4;
 
           return (
             <g key={voyager.name}>
@@ -632,7 +653,7 @@ export function SolarSystemMap({
           ))}
         </div>
         <div className="flex items-center gap-0.5">
-          {([1, 5, 20] as const).map((m) => (
+          {([1, 5, 15] as const).map((m) => (
             <button
               key={m}
               onClick={() => setSizeMode(m)}
