@@ -522,7 +522,7 @@ export function SolarSystemMap({
                   <circle cx={CX + r} cy={CY} r={es} fill={planet.color} />
                   {planet.nameEn === "Saturn" && es < 5 && (
                     <line
-                      x1={CX + r} y1={CY - 5} x2={CX + r} y2={CY + 5}
+                      x1={CX + r - 5} y1={CY} x2={CX + r + 5} y2={CY}
                       stroke={planet.color} strokeWidth="1.2" strokeOpacity="0.75"
                     />
                   )}
@@ -580,7 +580,7 @@ export function SolarSystemMap({
                   )}
                   {planet.nameEn === "Saturn" && sizeMode === 1 && (
                     <line
-                      x1={CX + r} y1={CY - 5} x2={CX + r} y2={CY + 5}
+                      x1={CX + r - 5} y1={CY} x2={CX + r + 5} y2={CY}
                       stroke={planet.color} strokeWidth="1.2" strokeOpacity="0.75"
                     />
                   )}
