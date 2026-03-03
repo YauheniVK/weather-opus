@@ -5,6 +5,7 @@ import { Navbar } from "@/components/layout/navbar";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Admin Panel" };
+export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
