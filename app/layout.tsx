@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   },
   description:
     "Real-time weather forecasts and official NBRB currency exchange rates in one beautiful dashboard.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -3,7 +3,8 @@
  * Does NOT import stripe or server-only env vars.
  */
 export interface PlanDisplay {
-  id: "monthly" | "annual";
+  id: "premium-monthly" | "premium-annual" | "elite-monthly" | "elite-annual";
+  tier: "premium" | "elite";
   name: string;
   price: number;
   interval: "month" | "year";
@@ -12,31 +13,51 @@ export interface PlanDisplay {
 
 export const PLAN_DISPLAY: PlanDisplay[] = [
   {
-    id: "monthly",
+    id: "premium-monthly",
+    tier: "premium",
     name: "Premium Monthly",
-    price: 9.99,
+    price: 5.99,
     interval: "month",
   },
   {
-    id: "annual",
+    id: "premium-annual",
+    tier: "premium",
     name: "Premium Annual",
-    price: 79.99,
+    price: 59.90,
     interval: "year",
-    savings: "Save 33%",
+    savings: "Save 17%",
+  },
+  {
+    id: "elite-monthly",
+    tier: "elite",
+    name: "Elite Monthly",
+    price: 19.99,
+    interval: "month",
+  },
+  {
+    id: "elite-annual",
+    tier: "elite",
+    name: "Elite Annual",
+    price: 199.90,
+    interval: "year",
+    savings: "Save 17%",
   },
 ];
 
+/** tier → "free" | "premium" | "elite" for each feature row */
 export const ALL_FEATURES = [
-  { text: "Real-time weather data", free: true },
-  { text: "2-day weather forecast", free: true },
-  { text: "NBRB rates: USD, EUR, PLN, RUB, CNY", free: true },
-  { text: "Currency converter", free: true },
-  { text: "Weather search by city", free: true },
-  { text: "Geolocation support", free: true },
-  { text: "7-day extended forecast", free: false },
-  { text: "All NBRB exchange rates", free: false },
-  { text: "Cross-currency rates panel", free: false },
-  { text: "Ad-free experience", free: false },
-  { text: "Save up to 10 cities", free: false },
-  { text: "Priority email support", free: false },
+  { text: "Real-time weather data",             tier: "free"    as const },
+  { text: "2-day weather forecast",             tier: "free"    as const },
+  { text: "NBRB rates: USD, EUR, PLN, RUB, CNY", tier: "free"  as const },
+  { text: "Weather map",                        tier: "free"    as const },
+  { text: "Weather search by city",             tier: "free"    as const },
+  { text: "Geolocation support",                tier: "free"    as const },
+  { text: "7-day extended forecast",            tier: "premium" as const },
+  { text: "Currency converter",                 tier: "premium" as const },
+  { text: "All NBRB exchange rates",            tier: "premium" as const },
+  { text: "Cross-currency rates panel",         tier: "premium" as const },
+  { text: "Space weather panel",                tier: "premium" as const },
+  { text: "Solar system — static mode",         tier: "premium" as const },
+  { text: "NASA ephemeris animation",           tier: "elite"   as const },
+  { text: "Astronomy Photo of the Day",         tier: "elite"   as const },
 ] as const;

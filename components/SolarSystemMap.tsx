@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { PLANETS, VOYAGERS } from "@/lib/mockData";
+import { PLANETS, PROBES } from "@/lib/mockData";
 import { getPlanetSVGAngle } from "@/lib/planetPositions";
 import type { Planet, Voyager, SpacePoint } from "@/types/space";
 
@@ -13,11 +13,14 @@ const SVG_H    = 920;   // taller than wide so Voyagers fit below the orbital pl
 const MIN_R = 30;
 const MAX_R = 320;
 
+// Log scale spans from Mercury's orbit (0.39 AU) to Neptune (30.1 AU) → [MIN_R, MAX_R].
+// Planet orbit rings are anchored here — do not change LOG_MIN or ring positions shift.
 const LOG_MIN = Math.log10(0.39);
 const LOG_MAX = Math.log10(30.1);
 
 function orbitRadius(distance: number): number {
-  return MIN_R + ((Math.log10(distance) - LOG_MIN) / (LOG_MAX - LOG_MIN)) * (MAX_R - MIN_R);
+  const logD = Math.max(LOG_MIN, Math.min(LOG_MAX, Math.log10(distance)));
+  return MIN_R + ((logD - LOG_MIN) / (LOG_MAX - LOG_MIN)) * (MAX_R - MIN_R);
 }
 
 export const ANIM_DURATIONS: Record<string, number> = {
@@ -34,6 +37,46 @@ export const ANIM_DURATIONS: Record<string, number> = {
 const VOYAGER_R = 355;
 const MIN_ORBIT_PX = 4;
 
+// Inner zone for probes inside Mercury's orbit (e.g. Parker Solar Probe).
+// Cubic Hermite spline [0.04, 0.39 AU] → [INNER_R_MIN, MIN_R]:
+//   • slope = 0 at d=0.04 (horizontal at PSP perihelion)
+//   • slope = log-scale derivative at d=0.39 (C¹ continuous — no kink)
+const INNER_D_MIN = 0.04;    // PSP perihelion ≈ 0.046 AU
+const INNER_D_MAX = 0.39;    // Mercury's orbit (= LOG_MIN base)
+const INNER_R_MIN = 8;       // visual radius at INNER_D_MIN
+
+// Log-scale derivative dr/dd at Mercury's orbit (px/AU), converted to t-space by × Δd.
+// dr/dd = (MAX_R − MIN_R) / ((LOG_MAX − LOG_MIN) · ln10 · d)
+const _INNER_DELTA = INNER_D_MAX - INNER_D_MIN;                // 0.35 AU
+const _LOG_SLOPE_AT_MERCURY =
+  (MAX_R - MIN_R) / ((LOG_MAX - LOG_MIN) * Math.LN10 * INNER_D_MAX);
+const HERMITE_M1 = _LOG_SLOPE_AT_MERCURY * _INNER_DELTA;       // slope in t-space at t=1
+
+// Smooth log extension beyond Neptune: [30.07, 170 AU] → [MAX_R, VOYAGER_R].
+const LOG_PROBE_EXT_MIN = Math.log10(30.07);
+const LOG_PROBE_EXT_MAX = Math.log10(170);
+
+function probeRadius(distance: number): number {
+  if (distance <= INNER_D_MIN) return INNER_R_MIN;
+  if (distance < INNER_D_MAX) {
+    // Cubic Hermite: P(t) = h00·P0 + h10·m0 + h01·P1 + h11·m1
+    // m0=0 (flat start), m1=HERMITE_M1 (matches log slope at Mercury)
+    const t  = (distance - INNER_D_MIN) / _INNER_DELTA;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const h01 = -2*t3 + 3*t2;          // weight of P1 = MIN_R
+    const h11 =    t3 -   t2;          // weight of m1
+    return (1 - h01) * INNER_R_MIN + h01 * MIN_R + h11 * HERMITE_M1;
+  }
+  if (distance <= 30.07) return orbitRadius(distance);
+  // Outer extension beyond Neptune
+  const frac = Math.min(
+    1,
+    (Math.log10(distance) - LOG_PROBE_EXT_MIN) / (LOG_PROBE_EXT_MAX - LOG_PROBE_EXT_MIN),
+  );
+  return MAX_R + (VOYAGER_R - MAX_R) * frac;
+}
+
 // Heliosphere boundary zones — shown only in linear mode
 const HELIOSPHERE_ZONES = [
   { au: 85,  label: "Терм. удар",  stroke: "rgba(251,191,36,0.22)",  textFill: "rgba(251,191,36,0.60)"  },
@@ -42,7 +85,7 @@ const HELIOSPHERE_ZONES = [
 
 // Linear scale options — selected one sets effectiveMaxAU
 const SCALE_OPTIONS = [
-  { key: "voyagers",   label: "Зонды сегодня", au: 170   },
+  { key: "voyagers",   label: "Все зонды", au: 170   },
   { key: "heliopause", label: "Гелиопауза",    au: 120   },
   { key: "termshock",  label: "Терм. удар",    au: 85    },
   { key: "neptune",    label: "Нептун",        au: 30.07 },
@@ -52,6 +95,40 @@ const SCALE_OPTIONS = [
   { key: "mars",       label: "Марс",          au: 1.524 },
 ] as const;
 type ScaleKey = typeof SCALE_OPTIONS[number]["key"];
+
+// ─── Elliptical orbit helpers (used in Linear mode) ─────────────────────────
+/** Heliocentric distance (AU) at a given ecliptic longitude, accounting for eccentricity. */
+function planetDistAU(p: Planet, eclLonDeg: number): number {
+  const e = p.eccentricity;
+  if (e === 0) return p.distance;
+  const nu = ((eclLonDeg - p.perihelionLon) * Math.PI) / 180;
+  return p.distance * (1 - e * e) / (1 + e * Math.cos(nu));
+}
+
+// ─── CSS-animation elliptical keyframes (Linear mode) ────────────────────────
+const ELLIPSE_N = 72;                        // sample every 5°
+const ELLIPSE_KT = Array.from({ length: ELLIPSE_N + 1 }, (_, i) =>
+  (i / ELLIPSE_N).toFixed(6),
+).join(";");
+
+/**
+ * Build `<animateTransform type="translate">` values string for one orbit.
+ * At each keyframe the radial offset Δx = r(angle_i) − r(angle_0) keeps the
+ * planet on its Keplerian ellipse while <animateTransform type="rotate"> on the
+ * parent <g> handles the angular position.
+ */
+function ellipseTranslateVals(
+  planet: Planet, startAngle: number, baseR: number, pxPerAU: number,
+): string {
+  const eclStart = (((-startAngle) % 360) + 360) % 360;
+  const vals: string[] = [];
+  for (let i = 0; i <= ELLIPSE_N; i++) {
+    const eclLon = (eclStart + (i / ELLIPSE_N) * 360) % 360;
+    const dx = planetDistAU(planet, eclLon) * pxPerAU - baseR;
+    vals.push(`${dx.toFixed(1)} 0`);
+  }
+  return vals.join(";");
+}
 
 // ─── Deterministic stars — all minimum size (r=0.5, sub-pixel) ───────────────
 const STAR_DATA = Array.from({ length: 200 }, (_, i) => {
@@ -106,7 +183,7 @@ const SEASON_DATA = [
   { id: "spring", lineAngle: SA_MAR1, label: "Весна", labelAngle: ((SA_MAR1 - 4) + 360) % 360, stroke: SEASON_LINE_STROKE, labelColor: "rgba(134,239,172,0.75)", dx:  0, dy:  0 },
   { id: "summer", lineAngle: SA_JUN1, label: "Лето",  labelAngle: ((SA_JUN1 - 4) + 360) % 360, stroke: SEASON_LINE_STROKE, labelColor: "rgba(253,224,71,0.75)",  dx: -8, dy: 10 },
   { id: "autumn", lineAngle: SA_SEP1, label: "Осень", labelAngle: ((SA_SEP1 - 4) + 360) % 360, stroke: SEASON_LINE_STROKE, labelColor: "rgba(251,146,60,0.75)",  dx:  0, dy:  0 },
-  { id: "winter", lineAngle: SA_DEC1, label: "Зима",  labelAngle: ((SA_DEC1 - 4) + 360) % 360, stroke: SEASON_LINE_STROKE, labelColor: "rgba(147,197,253,0.75)", dx:  0, dy:  0 },
+  { id: "winter", lineAngle: SA_DEC1, label: "Зима",  labelAngle: ((SA_DEC1 - 4) + 360) % 360, stroke: SEASON_LINE_STROKE, labelColor: "rgba(147,197,253,0.75)", dx: 12, dy: -10 },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -119,6 +196,8 @@ export interface SolarSystemMapProps {
   voyagerAngles:     Record<string, number>;
   currentPositions?: Map<string, SpacePoint> | null;
   voyagerTrails?:    Map<string, SpacePoint[]> | null;
+  onHoverBody?:      (nameEn: string | null) => void;
+  onScaleChange?:    (scale: "log" | "linear") => void;
 }
 
 type TooltipState =
@@ -129,7 +208,7 @@ type TooltipState =
 // ─── Component ────────────────────────────────────────────────────────────────
 export function SolarSystemMap({
   mode, planetAngles, liveAngles, voyagerAngles,
-  currentPositions = null, voyagerTrails = null,
+  currentPositions = null, voyagerTrails = null, onHoverBody, onScaleChange,
 }: SolarSystemMapProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const clearRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -142,10 +221,17 @@ export function SolarSystemMap({
   const [tooltip,       setTooltip]       = useState<TooltipState>(null);
   const [hoveredPlanet, setHoveredPlanet] = useState<string | null>(null);
 
+  // ── Probe toggles (chronological by launch) ─────────────────────────────
+  const [showPioneer,  setShowPioneer]  = useState(false);
+  const [showVoyagers, setShowVoyagers] = useState(true);
+  const [showCassini,  setShowCassini]  = useState(false);
+  const [showMsgr,     setShowMsgr]     = useState(false);
+  const [showNH,       setShowNH]       = useState(false);
+  const [showPSP,      setShowPSP]      = useState(false);
+
   // ── Cosmetic layer toggles (log + linear) ────────────────────────────────
-  const [showVoyagers, setShowVoyagers] = useState(true); // log mode
-  const [showSeasons,  setShowSeasons]  = useState(true);
-  const [showNY,       setShowNY]       = useState(true);
+  const [showSeasons,  setShowSeasons]  = useState(false);
+  const [showNY,       setShowNY]       = useState(false);
   const [showVernal,   setShowVernal]   = useState(true);
 
   // ── Scale + size toggles ─────────────────────────────────────────────────
@@ -153,7 +239,7 @@ export function SolarSystemMap({
   const [sizeMode, setSizeMode] = useState<1 | 5 | 15>(5);
 
   // ── Linear scale selector ─────────────────────────────────────────────────
-  const [scaleKey, setScaleKey] = useState<ScaleKey>("heliopause");
+  const [scaleKey, setScaleKey] = useState<ScaleKey>("neptune");
 
   const effectiveMaxAU = scale === "linear"
     ? (SCALE_OPTIONS.find((o) => o.key === scaleKey)?.au ?? 120)
@@ -208,6 +294,7 @@ export function SolarSystemMap({
     clearRef.current = setTimeout(() => {
       setHoveredPlanet(null);
       setTooltip(null);
+      // NOTE: don't call onHoverBody(null) here — photo card keeps last body
     }, 60);
   }
 
@@ -216,6 +303,7 @@ export function SolarSystemMap({
     const { x, y } = getPos(e);
     setHoveredPlanet(planet.nameEn);
     setTooltip({ kind: "planet", data: planet, x, y });
+    onHoverBody?.(planet.nameEn);
   }
 
   function openVoyagerTooltip(e: React.MouseEvent, voyager: Voyager) {
@@ -223,6 +311,7 @@ export function SolarSystemMap({
     const { x, y } = getPos(e);
     setHoveredPlanet(null);
     setTooltip({ kind: "voyager", data: voyager, x, y });
+    onHoverBody?.(voyager.name);
   }
 
   function handleSVGMouseMove(e: React.MouseEvent<SVGSVGElement>) {
@@ -237,6 +326,7 @@ export function SolarSystemMap({
     cancelClose();
     setHoveredPlanet(null);
     setTooltip(null);
+    onHoverBody?.(null);
   }
 
   const isAnimating = mode === "animate" && !currentPositions;
@@ -263,28 +353,90 @@ export function SolarSystemMap({
       const pt = currentPositions.get(voyager.name);
       if (pt) {
         const rad = (pt.angle * Math.PI) / 180;
-        const r   = scaledR(pt.distance);
+        const r = scale === "log" ? probeRadius(pt.distance) : scaledR(pt.distance);
         return { vx: CX + r * Math.cos(rad), vy: CY - r * Math.sin(rad), distance: pt.distance };
       }
     }
     const angle = voyagerAngles[voyager.name] ?? voyager.angle;
     const rad   = (angle * Math.PI) / 180;
-    const vr    = scale === "linear" ? voyager.distance * linPxPerAU : VOYAGER_R;
+    const vr = scale === "linear" ? voyager.distance * linPxPerAU : probeRadius(voyager.distance);
     return { vx: CX + vr * Math.cos(rad), vy: CY - vr * Math.sin(rad), distance: voyager.distance };
   }
 
-  function buildTrailPoints(voyagerName: string): string {
+  // Returns trail as an array of polyline point-strings, one per continuous segment.
+  // In log mode, points below 0.39 AU (log-scale floor) are skipped — clamping them
+  // all to MIN_R at different angles produces a dense cluster of dashes at the inner
+  // ring (visible for PSP with perihelion ~0.046 AU). Skipping breaks the trail into
+  // clean aphelion arcs with natural gaps at each perihelion pass.
+  function buildTrailSegments(voyagerName: string): string[] {
     const trail = voyagerTrails?.get(voyagerName);
-    if (!trail || trail.length < 2) return "";
-    return trail.map((pt) => {
-      const rad = (pt.angle * Math.PI) / 180;
-      const r   = scaledR(pt.distance);
-      return `${(CX + r * Math.cos(rad)).toFixed(1)},${(CY - r * Math.sin(rad)).toFixed(1)}`;
-    }).join(" ");
+    if (!trail || trail.length < 2) return [];
+
+    const segments: string[] = [];
+    let current: string[] = [];
+
+    for (const pt of trail) {
+      // Skip only at the absolute scale floor (LOG_MIN = 0.04 AU).
+      // orbitRadius() clamps distances below 0.04 AU to MIN_R, creating a ring
+      // of identical-radius points at different angles — skip them instead.
+      const skip = scale === "log" && pt.distance < 0.04;
+      if (!skip) {
+        const rad = (pt.angle * Math.PI) / 180;
+        const r = scale === "log" ? probeRadius(pt.distance) : scaledR(pt.distance);
+        current.push(`${(CX + r * Math.cos(rad)).toFixed(1)},${(CY - r * Math.sin(rad)).toFixed(1)}`);
+      } else {
+        if (current.length >= 2) segments.push(current.join(" "));
+        current = [];
+      }
+    }
+    if (current.length >= 2) segments.push(current.join(" "));
+
+    return segments;
   }
 
-  // Voyager visibility — single toggle for both modes (right panel "Зонды")
-  const voyVisible = showVoyagers;
+  // ── Probe visibility & colors ─────────────────────────────────────────────
+  const probeVisible: Record<string, boolean> = {
+    "Pioneer 10":         showPioneer,
+    "Pioneer 11":         showPioneer,
+    "Voyager 1":          showVoyagers,
+    "Voyager 2":          showVoyagers,
+    "Cassini":            showCassini,
+    "MESSENGER":          showMsgr,
+    "New Horizons":       showNH,
+    "Parker Solar Probe": showPSP,
+  };
+  const PROBE_COLOR: Record<string, string> = {
+    "Pioneer 10":         "#FFB347",
+    "Pioneer 11":         "#FFB347",
+    "Voyager 1":          "#FF6B6B",
+    "Voyager 2":          "#FF6B6B",
+    "Cassini":            "#9B7DFF",
+    "MESSENGER":          "#00CED1",
+    "New Horizons":       "#7BE87B",
+    "Parker Solar Probe": "#FFD700",
+  };
+  // Missions no longer active (crashed / contact lost)
+  const COMPLETED_MISSIONS = new Set(["Pioneer 10", "Pioneer 11", "Cassini", "MESSENGER"]);
+  // Last real data point date for completed missions (dateRange excludes upper bound,
+  // so this is one day before PROBE_LATEST). Cross shown from this date onwards.
+  const MISSION_END_DATES: Record<string, string> = {
+    "Pioneer 10": "2003-01-22",
+    "Pioneer 11": "1995-11-29",
+    "Cassini":    "2017-09-14",
+    "MESSENGER":  "2015-04-30",
+  };
+
+  // Per-probe label placement — spread overlapping labels apart
+  // Pioneer 11 (284.6°), New Horizons (288.4°), Voyager 2 (290.7°) cluster within 6°
+  const PROBE_LABEL_POS: Record<string, { dx: number; dy: number; anchor: "start" | "middle" | "end" }> = {
+    "Pioneer 10":   { dx: -10, dy:   4, anchor: "end"    },  // left of dot
+    "Voyager 1":    { dx:  10, dy:  -4, anchor: "start"  },  // right of dot, higher
+    "Voyager 2":    { dx:  14, dy:  -2, anchor: "start"  },  // right, slightly above
+    "New Horizons": { dx:  -6, dy:  18, anchor: "start"  },  // below-left
+    "Pioneer 11":   { dx: -10, dy:  -2, anchor: "end"    },  // left of dot, aligned with V1
+    "Cassini":      { dx:  10, dy:  10, anchor: "start"  },  // right of dot, lower
+    "MESSENGER":    { dx:   0, dy: -10, anchor: "middle" },  // above, centered
+  };
 
   return (
     <div ref={wrapperRef} className="relative w-full" style={{ aspectRatio: `${SVG_SIZE} / ${SVG_H}` }}>
@@ -393,14 +545,32 @@ export function SolarSystemMap({
           const r         = scaledR(planet.distance);
           const isHovered = hoveredPlanet === planet.nameEn;
           if (scale === "linear" && r < MIN_ORBIT_PX) return null;
+          const stroke      = isHovered ? planet.color : "rgba(255,255,255,0.15)";
+          const strokeWidth = isHovered ? 2 : 1;
+          const strokeOp    = isHovered ? 0.7 : 1;
+
+          // Linear mode: elliptical orbits (always — in all sub-modes)
+          if (scale === "linear" && planet.eccentricity > 0) {
+            const a  = planet.distance;
+            const e  = planet.eccentricity;
+            const aPx = a * linPxPerAU;
+            const bPx = a * Math.sqrt(1 - e * e) * linPxPerAU;
+            const cPx = a * e * linPxPerAU;
+            return (
+              <ellipse
+                key={`orbit-vis-${planet.nameEn}`}
+                cx={CX - cPx} cy={CY}
+                rx={aPx} ry={bPx}
+                fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeOpacity={strokeOp}
+                transform={`rotate(${-planet.perihelionLon}, ${CX}, ${CY})`}
+              />
+            );
+          }
           return (
             <circle
               key={`orbit-vis-${planet.nameEn}`}
               cx={CX} cy={CY} r={r}
-              fill="none"
-              stroke={isHovered ? planet.color : "rgba(255,255,255,0.15)"}
-              strokeWidth={isHovered ? 2 : 1}
-              strokeOpacity={isHovered ? 0.7 : 1}
+              fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeOpacity={strokeOp}
             />
           );
         })}
@@ -409,22 +579,61 @@ export function SolarSystemMap({
         {PLANETS.map((planet) => {
           const r = scaledR(planet.distance);
           if (scale === "linear" && r < MIN_ORBIT_PX) return null;
+          const hitProps = {
+            fill: "none" as const,
+            stroke: "rgba(255,255,255,0.001)",
+            strokeWidth: 16,
+            style: { cursor: "pointer" as const, pointerEvents: "stroke" as const },
+            onMouseEnter: (e: React.MouseEvent) => openPlanetTooltip(e as React.MouseEvent<Element>, planet),
+            onMouseLeave: scheduleClose,
+          };
+          if (scale === "linear" && planet.eccentricity > 0) {
+            const a  = planet.distance;
+            const e  = planet.eccentricity;
+            const aPx = a * linPxPerAU;
+            const bPx = a * Math.sqrt(1 - e * e) * linPxPerAU;
+            const cPx = a * e * linPxPerAU;
+            return (
+              <ellipse
+                key={`orbit-hit-${planet.nameEn}`}
+                cx={CX - cPx} cy={CY} rx={aPx} ry={bPx}
+                transform={`rotate(${-planet.perihelionLon}, ${CX}, ${CY})`}
+                {...hitProps}
+              />
+            );
+          }
           return (
             <circle
               key={`orbit-hit-${planet.nameEn}`}
               cx={CX} cy={CY} r={r}
-              fill="none"
-              stroke="rgba(255,255,255,0.001)"
-              strokeWidth={16}
-              style={{ cursor: "pointer", pointerEvents: "stroke" }}
-              onMouseEnter={(e) => openPlanetTooltip(e, planet)}
-              onMouseLeave={scheduleClose}
+              {...hitProps}
             />
           );
         })}
 
         {/* ── Sun ──────────────────────────────────────────────────────── */}
+        <g style={{ cursor: "pointer" }}
+          onMouseEnter={() => { cancelClose(); onHoverBody?.("Sun"); }}
+          onMouseLeave={scheduleClose}
+        >
         {scale === "log" ? (
+          sizeMode === 15 ? (
+            <>
+              <circle cx={CX} cy={CY} r={46} fill="rgba(253,184,19,0.03)" />
+              <circle cx={CX} cy={CY} r={30} fill="rgba(253,184,19,0.07)" />
+              <circle cx={CX} cy={CY} r={19} fill="rgba(253,184,19,0.17)" />
+              <circle cx={CX} cy={CY} r={12} fill="#FDB813" />
+            </>
+          ) : sizeMode === 5 ? (
+            <>
+              <circle cx={CX} cy={CY} r={16} fill="rgba(253,184,19,0.06)" />
+              <circle cx={CX} cy={CY} r={11} fill="rgba(253,184,19,0.14)" />
+              <circle cx={CX} cy={CY} r={7}  fill="#FDB813" />
+            </>
+          ) : (
+            <circle cx={CX} cy={CY} r={5} fill="#FDB813" />
+          )
+        ) : (scaleKey === "jupiter" || scaleKey === "mars") ? (
           sizeMode === 15 ? (
             <>
               <circle cx={CX} cy={CY} r={46} fill="rgba(253,184,19,0.03)" />
@@ -444,14 +653,23 @@ export function SolarSystemMap({
         ) : (
           <circle cx={CX} cy={CY} r={sizeMode === 1 ? 1.5 : sizeMode === 5 ? 2 : 3.5} fill="#FDB813" />
         )}
+        </g>
 
         {/* ── Planets ──────────────────────────────────────────────────── */}
         {PLANETS.map((planet) => {
-          const r      = scaledR(planet.distance);
+          let r        = scaledR(planet.distance);
           const dur    = ANIM_DURATIONS[planet.nameEn] ?? 60;
           const angle  = resolvePlanetAngle(planet.nameEn);
           const hidden = scale === "linear" && r < MIN_ORBIT_PX;
           const es     = eSize(planet);
+
+          // Linear mode: use actual elliptical distance for all planets
+          if (scale === "linear" && planet.eccentricity > 0) {
+            const eclLon = (((-angle) % 360) + 360) % 360;
+            const realPt = currentPositions?.get(planet.nameEn);
+            const distAU = realPt ? realPt.distance : planetDistAU(planet, eclLon);
+            r = distAU * linPxPerAU;
+          }
 
           return (
             <g
@@ -471,135 +689,196 @@ export function SolarSystemMap({
                 />
               )}
 
-              {scale === "log" ? (
-                <>
-                  {/* Saturn: ellipse ring when es≥5 (×5 and ×15), line when es<5 (×1) */}
-                  {planet.nameEn === "Saturn" && es >= 5 && (
-                    <ellipse
-                      cx={CX + r} cy={CY}
-                      rx={es * 2.2} ry={es * 0.45}
-                      fill="none" stroke="#E4D191" strokeWidth="2" strokeOpacity="0.60"
-                    />
-                  )}
-                  <circle cx={CX + r} cy={CY} r={es} fill={planet.color} />
-                  {planet.nameEn === "Saturn" && es < 5 && (
-                    <line
-                      x1={CX + r - 5} y1={CY} x2={CX + r + 5} y2={CY}
-                      stroke={planet.color} strokeWidth="1.2" strokeOpacity="0.75"
-                    />
-                  )}
-                  {/* Jupiter bands + red spot — shown whenever es ≥ 5 */}
-                  {es >= 5 && planet.nameEn === "Jupiter" && (
-                    <>
-                      <ellipse
-                        cx={CX + r} cy={CY + es * 0.28}
-                        rx={es * 0.9} ry={es * 0.28}
-                        fill="rgba(100,55,18,0.45)"
-                      />
-                      <ellipse
-                        cx={CX + r + es * 0.28} cy={CY + es * 0.28}
-                        rx={es * 0.28} ry={es * 0.2}
-                        fill="rgba(190,42,18,0.85)"
-                      />
-                    </>
-                  )}
-                  {/* Glow — only for large sizes */}
-                  {es >= 8 && (
-                    <circle cx={CX + r} cy={CY} r={es + 3} fill={planet.color} opacity="0.15" />
-                  )}
-                </>
-              ) : (
-                <>
-                  <circle
-                    cx={CX + r} cy={CY}
-                    r={sizeMode === 15
-                      ? (planet.nameEn === "Jupiter" ? 12 : planet.nameEn === "Saturn" || planet.nameEn === "Uranus" || planet.nameEn === "Neptune" ? 7 : 3.5 /* Earth group unchanged */)
-                      : sizeMode === 5
-                        ? (planet.nameEn === "Jupiter" ? 6
-                            : planet.nameEn === "Saturn" || planet.nameEn === "Uranus" || planet.nameEn === "Neptune" ? 3.5
-                            : 2 /* Earth group unchanged */)
-                        : /* ×1 — gas giants match Log ×1 */
-                          (planet.nameEn === "Jupiter" ? 3
-                            : planet.nameEn === "Saturn" || planet.nameEn === "Uranus" || planet.nameEn === "Neptune" ? 2
-                            : 1)
-                    }
-                    fill={planet.color}
+              {/* Inner group: radial translate animation keeps planet on Keplerian ellipse
+                  during CSS animation in Linear mode */}
+              <g>
+                {isAnimating && scale === "linear" && planet.eccentricity > 0 && (
+                  <animateTransform
+                    attributeName="transform"
+                    type="translate"
+                    values={ellipseTranslateVals(planet, angle, r, linPxPerAU)}
+                    keyTimes={ELLIPSE_KT}
+                    dur={`${dur}s`}
+                    repeatCount="indefinite"
                   />
-                  {/* Saturn: ellipse rings in ×15, line in ×5, tiny line in ×1 */}
-                  {planet.nameEn === "Saturn" && sizeMode === 15 && (
-                    <ellipse
-                      cx={CX + r} cy={CY}
-                      rx={18} ry={3.6}
-                      fill="none" stroke="#E4D191" strokeWidth="2" strokeOpacity="0.65"
-                    />
-                  )}
-                  {planet.nameEn === "Saturn" && sizeMode === 5 && (
-                    <ellipse
-                      cx={CX + r} cy={CY}
-                      rx={9} ry={1.8}
-                      fill="none" stroke="#E4D191" strokeWidth="1.4" strokeOpacity="0.65"
-                    />
-                  )}
-                  {planet.nameEn === "Saturn" && sizeMode === 1 && (
-                    <line
-                      x1={CX + r - 5} y1={CY} x2={CX + r + 5} y2={CY}
-                      stroke={planet.color} strokeWidth="1.2" strokeOpacity="0.75"
-                    />
-                  )}
-                </>
-              )}
+                )}
 
-              <circle
-                cx={CX + r} cy={CY}
-                r={Math.max(es + 5, 10)}
-                fill="transparent"
-                style={{ cursor: "pointer" }}
-                onMouseEnter={(e) => openPlanetTooltip(e, planet)}
-                onMouseLeave={scheduleClose}
-              />
+                {scale === "log" ? (
+                  <>
+                    {/* Saturn: ellipse ring when es≥5 (×5 and ×15), line when es<5 (×1) */}
+                    {planet.nameEn === "Saturn" && es >= 5 && (
+                      <ellipse
+                        cx={CX + r} cy={CY}
+                        rx={es * 2.2} ry={es * 0.45}
+                        fill="none" stroke="#E4D191" strokeWidth="2" strokeOpacity="0.60"
+                      />
+                    )}
+                    <circle cx={CX + r} cy={CY} r={es} fill={planet.color} />
+                    {planet.nameEn === "Saturn" && es < 5 && (
+                      <line
+                        x1={CX + r - 5} y1={CY} x2={CX + r + 5} y2={CY}
+                        stroke={planet.color} strokeWidth="1.2" strokeOpacity="0.75"
+                      />
+                    )}
+                    {/* Jupiter bands + red spot — shown whenever es ≥ 5 */}
+                    {es >= 5 && planet.nameEn === "Jupiter" && (
+                      <>
+                        <ellipse
+                          cx={CX + r} cy={CY + es * 0.28}
+                          rx={es * 0.9} ry={es * 0.28}
+                          fill="rgba(100,55,18,0.45)"
+                        />
+                        <ellipse
+                          cx={CX + r + es * 0.28} cy={CY + es * 0.28}
+                          rx={es * 0.28} ry={es * 0.2}
+                          fill="rgba(190,42,18,0.85)"
+                        />
+                      </>
+                    )}
+                    {/* Glow — only for large sizes */}
+                    {es >= 8 && (
+                      <circle cx={CX + r} cy={CY} r={es + 3} fill={planet.color} opacity="0.15" />
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <circle
+                      cx={CX + r} cy={CY}
+                      r={(scaleKey === "jupiter" || scaleKey === "mars")
+                        ? es   /* Jupiter/Mars scale: use Log sizes for all ×1/×5/×15 */
+                        : sizeMode === 15
+                          ? (planet.nameEn === "Jupiter" ? 12 : planet.nameEn === "Saturn" || planet.nameEn === "Uranus" || planet.nameEn === "Neptune" ? 7 : 3.5)
+                          : sizeMode === 5
+                            ? (planet.nameEn === "Jupiter" ? 6
+                                : planet.nameEn === "Saturn" || planet.nameEn === "Uranus" || planet.nameEn === "Neptune" ? 3.5
+                                : 2)
+                            : (planet.nameEn === "Jupiter" ? 3
+                                : planet.nameEn === "Saturn" || planet.nameEn === "Uranus" || planet.nameEn === "Neptune" ? 2
+                                : 1)
+                      }
+                      fill={planet.color}
+                    />
+                    {/* Saturn: ellipse rings in ×15, line in ×5, tiny line in ×1 */}
+                    {planet.nameEn === "Saturn" && sizeMode === 15 && (
+                      <ellipse
+                        cx={CX + r} cy={CY}
+                        rx={18} ry={3.6}
+                        fill="none" stroke="#E4D191" strokeWidth="2" strokeOpacity="0.65"
+                      />
+                    )}
+                    {planet.nameEn === "Saturn" && sizeMode === 5 && (
+                      <ellipse
+                        cx={CX + r} cy={CY}
+                        rx={9} ry={1.8}
+                        fill="none" stroke="#E4D191" strokeWidth="1.4" strokeOpacity="0.65"
+                      />
+                    )}
+                    {planet.nameEn === "Saturn" && sizeMode === 1 && (
+                      <line
+                        x1={CX + r - 5} y1={CY} x2={CX + r + 5} y2={CY}
+                        stroke={planet.color} strokeWidth="1.2" strokeOpacity="0.75"
+                      />
+                    )}
+                  </>
+                )}
+
+                <circle
+                  cx={CX + r} cy={CY}
+                  r={Math.max(es + 5, 10)}
+                  fill="transparent"
+                  style={{ cursor: "pointer" }}
+                  onMouseEnter={(e) => openPlanetTooltip(e, planet)}
+                  onMouseLeave={scheduleClose}
+                />
+              </g>
             </g>
           );
         })}
 
-        {/* ── Voyagers ─────────────────────────────────────────────────── */}
-        {voyVisible && VOYAGERS.map((voyager) => {
-          const { vx, vy } = resolveVoyagerPos(voyager);
-          const trailPts = buildTrailPoints(voyager.name);
-          const realPt   = currentPositions?.get(voyager.name) ?? null;
+        {/* ── Probes (Pioneers, Voyagers, Cassini, MESSENGER, NH, PSP) ── */}
+        {PROBES.map((probe) => {
+          if (!probeVisible[probe.name]) return null;
+
+          const realPt    = currentPositions?.get(probe.name) ?? null;
+
+          // In animation mode: skip if no data or pre-launch sentinel (distance < 0)
+          if (currentPositions && (!realPt || realPt.distance < 0)) return null;
+
+          const { vx, vy } = resolveVoyagerPos(probe);
+          const trailSegs = buildTrailSegments(probe.name);
+          const color     = PROBE_COLOR[probe.name] ?? "#FF6B6B";
           const vDotR  = sizeMode === 15 ? 6 : sizeMode === 5 ? 3.5 : 2;
           const vGlowR = sizeMode === 15 ? 11 : sizeMode === 5 ? 6   : 4;
+          const dist   = (realPt ?? probe).distance;
+
+          // Is mission ended? In animation: show cross from the last real data day onwards.
+          // In static mode: completed missions are always ended.
+          const endDate  = MISSION_END_DATES[probe.name];
+          const isEnded  = currentPositions
+            ? (realPt != null && endDate != null && realPt.date >= endDate)
+            : COMPLETED_MISSIONS.has(probe.name);
+
+          // Label visibility rules per probe group:
+          // - MESSENGER & PSP: inner-system, show only in linear at Jupiter/Mars scale
+          // - New Horizons & Cassini: show when beyond Jupiter orbit (5.203 AU)
+          // - Others (Voyagers, Pioneers): show when beyond Saturn (log) or Neptune (linear)
+          const isInnerProbe = probe.name === "MESSENGER" || probe.name === "Parker Solar Probe";
+          const isJupiterProbe = probe.name === "New Horizons" || probe.name === "Cassini";
+          const showLabel = isInnerProbe
+            ? (scale === "linear" && (scaleKey === "jupiter" || scaleKey === "mars"))
+            : isJupiterProbe
+              ? dist >= (scale === "linear" && scaleKey === "jupiter" ? 1.524 : 5.203)
+              : dist >= (scale === "linear" ? 30.07 : 9.537);
+
+          // Per-probe label offset to avoid overlaps in the crowded bottom area
+          // Pioneer 11 (284.6°), New Horizons (288.4°), Voyager 2 (290.7°) are within 6°
+          const lbl = PROBE_LABEL_POS[probe.name] ?? { dx: 10, dy: 4, anchor: "start" as const };
+
+          // Cross size for ended missions
+          const crossS = sizeMode === 15 ? 5 : sizeMode === 5 ? 3 : 2;
 
           return (
-            <g key={voyager.name}>
-              {trailPts && (
+            <g key={probe.name}>
+              {trailSegs.map((pts, si) => (
                 <polyline
-                  points={trailPts}
+                  key={si}
+                  points={pts}
                   fill="none"
-                  stroke="rgba(255,107,107,0.45)"
+                  stroke={color}
                   strokeWidth="1.5"
                   strokeDasharray="4 3"
+                  style={{ opacity: 0.45 }}
                 />
-              )}
+              ))}
               {!currentPositions && (
                 <line
                   x1={CX} y1={CY} x2={vx} y2={vy}
-                  stroke="rgba(255,107,107,0.3)" strokeWidth="1" strokeDasharray="5 4"
+                  stroke={color} strokeWidth="1" strokeDasharray="5 4"
+                  style={{ opacity: 0.3 }}
                 />
               )}
-              <circle cx={vx} cy={vy} r={vDotR}  fill="#FF6B6B" />
-              <circle cx={vx} cy={vy} r={vGlowR} fill="rgba(255,107,107,0.2)" />
-              {/* Label only after passing Neptune (linear) or Saturn (log) */}
-              {(scale === "linear"
-                ? (realPt ?? voyager).distance > 30.07
-                : (realPt ?? voyager).distance > 9.537
-              ) && (
+              <circle cx={vx} cy={vy} r={vDotR}  fill={color} />
+              <circle cx={vx} cy={vy} r={vGlowR} fill={color} style={{ opacity: 0.2 }} />
+              {/* Tiny cross on ended missions */}
+              {isEnded && (
+                <>
+                  <line
+                    x1={vx - crossS} y1={vy - crossS} x2={vx + crossS} y2={vy + crossS}
+                    stroke="white" strokeWidth="1.2" style={{ opacity: 0.7 }}
+                  />
+                  <line
+                    x1={vx + crossS} y1={vy - crossS} x2={vx - crossS} y2={vy + crossS}
+                    stroke="white" strokeWidth="1.2" style={{ opacity: 0.7 }}
+                  />
+                </>
+              )}
+              {showLabel && (
                 <text
-                  x={voyager.name === "Voyager 1" ? vx - 10 : vx + 10}
-                  y={vy + 4}
-                  textAnchor={voyager.name === "Voyager 1" ? "end" : "start"}
-                  fill="rgba(255,107,107,0.8)" fontSize="13" fontFamily="monospace"
+                  x={vx + lbl.dx} y={vy + lbl.dy}
+                  textAnchor={lbl.anchor}
+                  fill={color} style={{ opacity: 0.8 }} fontSize="11" fontFamily="monospace"
                 >
-                  {voyager.name}
+                  {probe.name}
                 </text>
               )}
               <circle
@@ -608,8 +887,8 @@ export function SolarSystemMap({
                 style={{ cursor: "pointer" }}
                 onMouseEnter={(e) => {
                   const enriched: Voyager = realPt
-                    ? { ...voyager, distance: realPt.distance, speed: realPt.speedKms }
-                    : voyager;
+                    ? { ...probe, distance: realPt.distance, speed: realPt.speedKms }
+                    : probe;
                   openVoyagerTooltip(e, enriched);
                 }}
                 onMouseLeave={scheduleClose}
@@ -625,7 +904,7 @@ export function SolarSystemMap({
           {(["log", "linear"] as const).map((s) => (
             <button
               key={s}
-              onClick={() => setScale(s)}
+              onClick={() => { setScale(s); onScaleChange?.(s); }}
               className={[
                 "px-2 py-0.5 rounded text-[10px] font-mono transition-colors",
                 scale === s
@@ -680,12 +959,18 @@ export function SolarSystemMap({
       {/* ── Layer toggles — bottom-right ─────────────────────────────────── */}
       <div className="absolute bottom-2 right-2 z-20 flex flex-col rounded-lg border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-sm">
         {[
-          { key: "voyagers", label: "Зонды",               val: showVoyagers, set: setShowVoyagers },
-          { key: "seasons",  label: "Сезоны",              val: showSeasons,  set: setShowSeasons  },
-          { key: "ny",       label: "Новый год",            val: showNY,       set: setShowNY       },
-          { key: "vernal",   label: "Весен. равноденствие", val: showVernal,   set: setShowVernal   },
-        ].map(({ key, label, val, set }) => (
-          <label key={key} className="flex cursor-pointer select-none items-center gap-2 py-0.5">
+          { key: "pioneer",  label: "Pioneers",             val: showPioneer,  set: setShowPioneer,  color: "#FFB347" },
+          { key: "voyagers", label: "Voyagers",              val: showVoyagers, set: setShowVoyagers, color: "#FF6B6B" },
+          { key: "cassini",  label: "Cassini",              val: showCassini,  set: setShowCassini,  color: "#9B7DFF" },
+          { key: "msgr",     label: "MESSENGER",            val: showMsgr,     set: setShowMsgr,     color: "#00CED1" },
+          { key: "nh",       label: "New Horizons",         val: showNH,       set: setShowNH,       color: "#7BE87B" },
+          { key: "psp",      label: "Parker Solar Probe",   val: showPSP,      set: setShowPSP,      color: "#FFD700" },
+          { key: "seasons",  label: "Сезоны",              val: showSeasons,  set: setShowSeasons,  color: undefined },
+          { key: "ny",       label: "Новый год",            val: showNY,       set: setShowNY,       color: undefined },
+          { key: "vernal",   label: "Весен. равноденствие", val: showVernal,   set: setShowVernal,   color: undefined },
+        ].map(({ key, label, val, set, color }) => (
+          <label key={key} className={`flex cursor-pointer select-none items-center gap-2 py-0.5${key === "seasons" ? " mt-1 pt-1 border-t border-white/10" : ""}`}>
+            {color && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: color }} />}
             <span className="flex-1 text-right text-[10px] text-white/55 whitespace-nowrap">{label}</span>
             <input
               type="checkbox"
@@ -730,13 +1015,24 @@ export function SolarSystemMap({
             );
           })()}
           {tooltip.kind === "voyager" && (() => {
-            const realPt    = currentPositions?.get(tooltip.data.name) ?? null;
-            const dispDist  = realPt ? realPt.distance.toFixed(3) : tooltip.data.distance.toFixed(1);
-            const dispLon   = realPt ? Math.round(realPt.angle) : Math.round(voyagerAngles[tooltip.data.name] ?? tooltip.data.angle);
-            const dispSpeed = realPt ? realPt.speedKms.toFixed(2) : tooltip.data.speed.toFixed(1);
+            const realPt      = currentPositions?.get(tooltip.data.name) ?? null;
+            const isCompleted = COMPLETED_MISSIONS.has(tooltip.data.name);
+            const dispDist    = realPt ? realPt.distance.toFixed(3) : tooltip.data.distance.toFixed(1);
+            const dispLon     = realPt ? Math.round(realPt.angle) : Math.round(voyagerAngles[tooltip.data.name] ?? tooltip.data.angle);
+            const dispSpeed   = realPt ? realPt.speedKms.toFixed(2) : tooltip.data.speed.toFixed(1);
+            const END_DATES: Record<string, string> = {
+              "Pioneer 10": "связь потеряна 23.01.2003",
+              "Pioneer 11": "связь потеряна 30.11.1995",
+              "Cassini":    "15.09.2017",
+              "MESSENGER":  "01.05.2015",
+            };
+            const endDate = END_DATES[tooltip.data.name] ?? null;
             return (
               <div className="space-y-1">
                 <p className="font-semibold text-red-400">{tooltip.data.name}</p>
+                {isCompleted && !realPt && (
+                  <p className="text-amber-400/80 text-[10px]">Миссия завершена{endDate ? ` ${endDate}` : ""}</p>
+                )}
                 <p className="text-white/60">Расстояние: <span className="text-red-400">{dispDist} AU</span></p>
                 {realPt && (
                   <p className="text-white/60">≈ <span className="text-red-400">{(realPt.distanceKm / 1e9).toFixed(3)} млрд км</span></p>

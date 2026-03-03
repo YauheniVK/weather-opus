@@ -23,6 +23,11 @@ const nextConfig = {
         protocol: "https",
         hostname: "apod.nasa.gov",
       },
+      {
+        protocol: "https",
+        hostname: "images-assets.nasa.gov",
+        pathname: "/image/**",
+      },
     ],
   },
 };

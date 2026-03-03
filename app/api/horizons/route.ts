@@ -9,8 +9,14 @@ export const dynamic = "force-dynamic";
 // Negative IDs (spacecraft) are stored WITHOUT single quotes here;
 // they are quoted in the URL construction below.
 const BODY_ID_MAP: Record<string, string> = {
-  Voyager_1: "-31",
-  Voyager_2: "-32",
+  Pioneer_10:         "-23",
+  Pioneer_11:         "-24",
+  Voyager_1:          "-31",
+  Voyager_2:          "-32",
+  Cassini:            "-82",
+  Parker_Solar_Probe: "-96",
+  New_Horizons:       "-98",
+  MESSENGER:          "-236",
 };
 
 // ─── Physical constants ───────────────────────────────────────────────────────
@@ -197,7 +203,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const controller = new AbortController();
     const timer      = setTimeout(() => controller.abort(), 30_000);
 
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
     clearTimeout(timer);
 
     if (!res.ok) {

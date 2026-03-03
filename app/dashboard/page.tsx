@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { AlertCircle, Sparkles, CloudSun, TrendingUp, Rocket } from "lucide-react";
+import { AlertCircle, Sparkles, CloudSun, TrendingUp, Rocket, Lock, Gem } from "lucide-react";
 import { WeatherSearch }   from "@/components/weather/weather-search";
 import { WeatherCard }     from "@/components/weather/weather-card";
 import { ForecastCard }    from "@/components/weather/forecast-card";
@@ -12,6 +12,7 @@ import { WeatherSkeleton } from "@/components/weather/weather-skeleton";
 import { CurrencyTable }   from "@/components/currency/currency-table";
 import { CurrencyConverter } from "@/components/currency/currency-converter";
 import { CrossRatesPanel } from "@/components/currency/cross-rates-panel";
+import { SolarActivity }   from "@/components/SolarActivity";
 import { ApodCard }        from "@/components/nasa/apod-card";
 import SpaceDashboard      from "@/components/SpaceDashboard";
 import { Badge }           from "@/components/ui/badge";
@@ -28,7 +29,7 @@ const WeatherMapDynamic = dynamic(
 );
 
 function DashboardContent() {
-  const { profile, isPremium, refresh } = useProfile();
+  const { tier, isPremium, isElite, refresh } = useProfile();
   const searchParams = useSearchParams();
 
   // ─── Weather state ────────────────────────────────────────────────────────
@@ -47,14 +48,20 @@ function DashboardContent() {
   const [apodLoading, setApodLoading] = useState(false);
   const [apodError, setApodError] = useState<string | null>(null);
   const apodFetchedRef = useRef(false);
+  const stripeToastShownRef = useRef(false);
 
-  // ─── Stripe redirect toasts ───────────────────────────────────────────────
+  // ─── Stripe redirect: sync subscription from Stripe API, then refresh ─────
   useEffect(() => {
+    if (stripeToastShownRef.current) return;
     if (searchParams.get("success") === "true") {
-      toast.success("Payment successful! Premium is now active.");
-      refresh();
+      stripeToastShownRef.current = true;
+      toast.success("Payment successful! Activating your subscription…");
+      fetch("/api/stripe/sync", { method: "POST" })
+        .then(() => refresh())
+        .catch(() => refresh());
     }
     if (searchParams.get("canceled") === "true") {
+      stripeToastShownRef.current = true;
       toast.info("Payment canceled. You can upgrade anytime.");
     }
   }, [searchParams, refresh]);
@@ -105,9 +112,9 @@ function DashboardContent() {
       });
   }, [handleWeatherSearch]);
 
-  // ─── NASA APOD — lazy fetch on first Space tab visit ──────────────────────
+  // ─── NASA APOD — lazy fetch on first Space tab visit (Elite only) ─────────
   const fetchApod = useCallback(async () => {
-    if (apodFetchedRef.current) return;
+    if (apodFetchedRef.current || !isElite) return;
     apodFetchedRef.current = true;
     setApodLoading(true);
     setApodError(null);
@@ -123,7 +130,7 @@ function DashboardContent() {
     } finally {
       setApodLoading(false);
     }
-  }, []);
+  }, [isElite]);
 
   const handleTabChange = (value: string) => {
     if (value === "space") fetchApod();
@@ -131,50 +138,64 @@ function DashboardContent() {
 
   return (
     <div className="space-y-6">
-      {/* ── Page header ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Welcome back
-            {profile?.name && (
-              <span className="text-muted-foreground font-normal">, {profile.name.split(" ")[0]}</span>
-            )}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {new Date().toLocaleDateString("en-US", {
-              weekday: "long",
-              year:    "numeric",
-              month:   "long",
-              day:     "numeric",
-            })}
-          </p>
-        </div>
-        {isPremium ? (
-          <Badge variant="premium" className="gap-1.5 py-1.5 px-3">
-            <Sparkles className="h-3.5 w-3.5" /> Premium Active
-          </Badge>
-        ) : (
-          <Link href="/pricing">
-            <Button variant="gradient" size="sm" className="gap-2">
-              <Sparkles className="h-4 w-4" /> Upgrade to Premium
-            </Button>
-          </Link>
-        )}
-      </div>
-
       {/* ── Tabs ────────────────────────────────────────────────────────── */}
-      <Tabs defaultValue="weather" className="space-y-6" onValueChange={handleTabChange}>
+      <Tabs defaultValue="currency" className="space-y-6" onValueChange={handleTabChange}>
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="weather"  className="gap-2 flex-1 sm:flex-none">
-            <CloudSun className="h-4 w-4" /> Weather
-          </TabsTrigger>
           <TabsTrigger value="currency" className="gap-2 flex-1 sm:flex-none">
             <TrendingUp className="h-4 w-4" /> Currency
+          </TabsTrigger>
+          <TabsTrigger value="weather"  className="gap-2 flex-1 sm:flex-none">
+            <CloudSun className="h-4 w-4" /> Weather
           </TabsTrigger>
           <TabsTrigger value="space"    className="gap-2 flex-1 sm:flex-none">
             <Rocket className="h-4 w-4" /> Space
           </TabsTrigger>
         </TabsList>
+
+        {/* ── Currency tab ────────────────────────────────────────────── */}
+        <TabsContent value="currency" className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+            {/* Left: exchange rates table */}
+            <CurrencyTable rates={rates} date={ratesDate} isLoading={ratesLoading} isPremium={isPremium} />
+
+            {/* Right: cross rates + converter stacked */}
+            <div className="space-y-4">
+              <CrossRatesPanel rates={rates} isPremium={isPremium} />
+
+              {isPremium ? (
+                rates.length > 0 ? (
+                  <CurrencyConverter rates={rates} />
+                ) : (
+                  <div className="rounded-xl border border-dashed flex items-center justify-center p-8 text-center text-muted-foreground text-sm">
+                    Loading converter...
+                  </div>
+                )
+              ) : (
+                <div className="relative rounded-xl border bg-card overflow-hidden">
+                  <div className="blur-sm pointer-events-none select-none opacity-40 p-6 space-y-4">
+                    <div className="h-5 w-36 bg-muted rounded" />
+                    <div className="h-10 w-full bg-muted rounded" />
+                    <div className="flex gap-2">
+                      <div className="flex-1 h-10 bg-muted rounded" />
+                      <div className="h-10 w-10 bg-muted rounded shrink-0" />
+                      <div className="flex-1 h-10 bg-muted rounded" />
+                    </div>
+                    <div className="h-10 w-full bg-muted rounded" />
+                  </div>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                    <Lock className="h-6 w-6 text-muted-foreground" />
+                    <p className="text-sm font-medium text-muted-foreground">Currency Converter</p>
+                    <Link href="/pricing">
+                      <Button size="sm" variant="gradient" className="gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5" /> Upgrade to Premium
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
 
         {/* ── Weather tab ─────────────────────────────────────────────── */}
         <TabsContent value="weather" className="space-y-4">
@@ -190,16 +211,27 @@ function DashboardContent() {
 
           {weatherData && !weatherLoading && (
             <div className="space-y-4 animate-fade-in">
-              <WeatherCard data={weatherData} />
-              {weatherData.forecast.length > 0 && (
-                <ForecastCard forecast={weatherData.forecast} isPremium={isPremium} />
-              )}
-              {isPremium && coords && (
-                <WeatherMapDynamic lat={coords.lat} lon={coords.lon} data={weatherData} />
-              )}
+              {/* 2-column: Weather+Map (2/3) | Forecast vertical (1/3), bottom-aligned */}
+              <div className="grid gap-4 lg:grid-cols-3 lg:items-stretch">
+                <div className="lg:col-span-2 space-y-4">
+                  <WeatherCard data={weatherData} />
+                  {coords && (
+                    <WeatherMapDynamic lat={coords.lat} lon={coords.lon} data={weatherData} />
+                  )}
+                </div>
+                {weatherData.forecast.length > 0 && (
+                  <div className="lg:col-span-1">
+                    <ForecastCard forecast={weatherData.forecast} isPremium={isPremium} layout="vertical" />
+                  </div>
+                )}
+              </div>
+
+              {/* Solar activity — full width */}
+              <SolarActivity layout="wide" />
             </div>
           )}
 
+          {/* Empty state */}
           {!weatherData && !weatherLoading && !weatherError && (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-20 text-center">
               <CloudSun className="h-12 w-12 text-muted-foreground/40 mb-4" />
@@ -209,56 +241,88 @@ function DashboardContent() {
           )}
         </TabsContent>
 
-        {/* ── Currency tab ────────────────────────────────────────────── */}
-        <TabsContent value="currency" className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <CurrencyTable rates={rates} date={ratesDate} isLoading={ratesLoading} isPremium={isPremium} />
-            </div>
-            <div>
-              {rates.length > 0 ? (
-                <CurrencyConverter rates={rates} />
-              ) : (
-                <div className="h-full rounded-xl border border-dashed flex items-center justify-center p-8 text-center text-muted-foreground text-sm">
-                  Loading converter...
-                </div>
-              )}
-            </div>
-          </div>
-          {rates.length > 0 && (
-            <CrossRatesPanel rates={rates} isPremium={isPremium} />
-          )}
-        </TabsContent>
-
         {/* ── Space tab ───────────────────────────────────────────────── */}
         <TabsContent value="space" className="space-y-6">
 
-          {/* Static demo sections: solar system map, voyager tracker, solar activity */}
-          <SpaceDashboard />
+          {isPremium ? (
+            <>
+              {/* Solar system map + voyager tracker */}
+              <SpaceDashboard isElite={isElite} />
 
-          <Separator />
+              {/* NASA Astronomy Picture of the Day — Elite only */}
+              {isElite && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-1">
+                      <h2 className="text-base font-semibold">Astronomy Picture of the Day</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Curated daily by NASA astronomers —{" "}
+                        {new Date().toLocaleDateString("en-US", {
+                          month: "long",
+                          day:   "numeric",
+                          year:  "numeric",
+                        })}
+                      </p>
+                    </div>
+                    <ApodCard data={apodData} isLoading={apodLoading} error={apodError} />
+                    {!apodData && !apodLoading && !apodError && (
+                      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-20 text-center">
+                        <Rocket className="h-12 w-12 text-muted-foreground/40 mb-4" />
+                        <p className="text-muted-foreground font-medium">Loading space content…</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
 
-          {/* Live section: NASA Astronomy Picture of the Day */}
-          <div className="space-y-4">
-            <div className="flex flex-col gap-1">
-              <h2 className="text-base font-semibold">Astronomy Picture of the Day</h2>
-              <p className="text-sm text-muted-foreground">
-                Curated daily by NASA astronomers —{" "}
-                {new Date().toLocaleDateString("en-US", {
-                  month: "long",
-                  day:   "numeric",
-                  year:  "numeric",
-                })}
-              </p>
-            </div>
-            <ApodCard data={apodData} isLoading={apodLoading} error={apodError} />
-            {!apodData && !apodLoading && !apodError && (
-              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-20 text-center">
-                <Rocket className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                <p className="text-muted-foreground font-medium">Loading space content…</p>
+              {/* APOD upgrade CTA for Premium (non-Elite) users */}
+              {!isElite && (
+                <>
+                  <Separator />
+                  <div className="relative rounded-xl border bg-card overflow-hidden">
+                    <div className="blur-sm pointer-events-none select-none opacity-40 p-6 space-y-4">
+                      <div className="h-6 w-64 bg-muted rounded" />
+                      <div className="h-64 w-full bg-muted rounded-xl" />
+                      <div className="h-4 w-full bg-muted rounded" />
+                    </div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                      <Lock className="h-8 w-8 text-muted-foreground" />
+                      <p className="text-base font-semibold text-muted-foreground">Astronomy Photo of the Day</p>
+                      <p className="text-sm text-muted-foreground/70">Available with Elite subscription</p>
+                      <Link href="/pricing">
+                        <Button size="sm" className="gap-1.5 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0">
+                          <Gem className="h-3.5 w-3.5" /> Upgrade to Elite
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            /* Free users — locked Space tab */
+            <div className="relative rounded-xl border bg-card overflow-hidden">
+              <div className="blur-sm pointer-events-none select-none opacity-40 p-6 space-y-6">
+                <div className="h-8 w-48 bg-muted rounded" />
+                <div className="h-[400px] w-full bg-muted rounded-xl" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="h-32 bg-muted rounded-xl" />
+                  <div className="h-32 bg-muted rounded-xl" />
+                </div>
               </div>
-            )}
-          </div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                <Lock className="h-10 w-10 text-muted-foreground" />
+                <p className="text-lg font-semibold text-muted-foreground">Solar System Dashboard</p>
+                <p className="text-sm text-muted-foreground/70">Available with Premium or Elite subscription</p>
+                <Link href="/pricing">
+                  <Button size="sm" variant="gradient" className="gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" /> Upgrade to Premium
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

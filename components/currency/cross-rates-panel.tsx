@@ -25,9 +25,12 @@ const BYN_ENTRY: ProcessedRate = {
   flag: "🇧🇾",
 };
 
+// Only these currencies are shown in cross-rates
+const CROSS_RATE_CODES = ["BYN", "RUB", "USD", "EUR", "PLN", "UAH", "CNY", "JPY", "TRY", "AED"];
+
 export function CrossRatesPanel({ rates, isPremium }: CrossRatesPanelProps) {
-  const allRates = [BYN_ENTRY, ...rates];
-  const [selected, setSelected] = useState(rates[0]?.code ?? "USD");
+  const allRates = [BYN_ENTRY, ...rates].filter((r) => CROSS_RATE_CODES.includes(r.code));
+  const [selected, setSelected] = useState("USD");
 
   const rateMap = Object.fromEntries(
     rates.map((r) => [r.code, { rate: r.rate, scale: r.scale }])

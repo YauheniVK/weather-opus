@@ -29,7 +29,28 @@
       "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && npm install leaflet react-leaflet@4 @types/leaflet 2>&1)",
       "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && npx tsc --noEmit 2>&1)",
       "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && git init && git add types/index.ts app/api/weather/route.ts app/api/weather/tile/route.ts components/weather/weather-search.tsx components/weather/weather-map.tsx app/dashboard/page.tsx next.config.js package.json package-lock.json 2>&1)",
-      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && git add . 2>&1)"
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && git add . 2>&1)",
+      "Bash(cd C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus:*)",
+      "Bash(gh auth:*)",
+      "Bash(where gh:*)",
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && git remote add origin https://github.com/YauheniVK/weather-opus.git && git push -u origin master 2>&1)",
+      "Bash(cd \"C:\\\\Users\\\\Yauheni\\\\VIBE\\\\weather-opus\" && git push 2>&1)",
+      "Bash(curl -s \"https://api.nasa.gov/planetary/apod?api_key=hJ2zgTYWoGLluBpCOKWtkdtGmTeZ0u3Wm9jSHqZg\" 2>&1 | python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('APOD OK:', d.get\\('title'\\), '|', d.get\\('date'\\)\\)\" 2>&1)",
+      "Bash(curl -s \"https://api.ipgeolocation.io/ipgeo?apiKey=c79adcfcee8e40a197022ae500a40e2d\" 2>&1 | python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('GEO OK:', d.get\\('city'\\), d.get\\('country_name'\\), '| lat:', d.get\\('latitude'\\), 'lon:', d.get\\('longitude'\\)\\)\" 2>&1)",
+      "WebSearch",
+      "WebFetch(domain:theskylive.com)",
+      "WebFetch(domain:ssd.jpl.nasa.gov)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(rm:*)",
+      "Bash(pkill:*)",
+      "WebFetch(domain:images-api.nasa.gov)",
+      "WebFetch(domain:images-assets.nasa.gov)",
+      "Bash(for body in \"''-23''\" \"''-24''\" \"''-98''\" \"''-96''\")",
+      "Bash(do)",
+      "Bash(echo \"=== Body $body ===\")",
+      "Bash(done)",
+      "Bash(wmic process where \"name=''node.exe''\" get ProcessId,CommandLine)"
     ]
   }
 }

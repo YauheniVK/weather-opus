@@ -24,32 +24,24 @@ interface CurrencyTableProps {
   isPremium?: boolean;
 }
 
-const FREE_CURRENCIES = ["USD", "EUR", "PLN", "RUB", "CNY"];
+const FREE_CURRENCIES  = ["USD", "EUR", "PLN", "RUB", "CNY"];
 const MAJOR_CURRENCIES = ["USD", "EUR", "RUB", "PLN", "GBP", "CHF", "CNY", "JPY", "CZK", "UAH"];
 
 export function CurrencyTable({ rates, date, isLoading, isPremium }: CurrencyTableProps) {
   const allowedCodes = isPremium ? MAJOR_CURRENCIES : FREE_CURRENCIES;
   const displayRates = rates.filter((r) => allowedCodes.includes(r.code));
 
-  if (isLoading) {
-    return <CurrencyTableSkeleton />;
-  }
+  if (isLoading) return <CurrencyTableSkeleton />;
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-base font-semibold">
-              Exchange Rates — BYN
-            </CardTitle>
+            <CardTitle className="text-base font-semibold">Exchange Rates — BYN</CardTitle>
             <CardDescription>
               National Bank of Belarus (NBRB) official daily rates
-              {date && (
-                <span className="ml-1">
-                  · {format(new Date(date), "dd MMM yyyy")}
-                </span>
-              )}
+              {date && <span className="ml-1">· {format(new Date(date), "dd MMM yyyy")}</span>}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -60,9 +52,7 @@ export function CurrencyTable({ rates, date, isLoading, isPremium }: CurrencyTab
                 </Button>
               </Link>
             )}
-            <Badge variant="outline" className="text-xs">
-              Live
-            </Badge>
+            <Badge variant="outline" className="text-xs">Live</Badge>
           </div>
         </div>
       </CardHeader>
@@ -79,27 +69,19 @@ export function CurrencyTable({ rates, date, isLoading, isPremium }: CurrencyTab
           <TableBody>
             {displayRates.map((rate, index) => (
               <TableRow key={rate.code} className="group">
-                <TableCell className="pl-6 text-muted-foreground text-sm">
-                  {index + 1}
-                </TableCell>
+                <TableCell className="pl-6 text-muted-foreground text-sm">{index + 1}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <span className="text-xl" role="img" aria-label={rate.code}>
-                      {rate.flag}
-                    </span>
+                    <span className="text-xl" role="img" aria-label={rate.code}>{rate.flag}</span>
                     <div>
                       <p className="font-semibold text-sm">{rate.code}</p>
                       <p className="text-xs text-muted-foreground">{rate.nameEn}</p>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="text-right text-sm text-muted-foreground">
-                  {rate.scale}
-                </TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">{rate.scale}</TableCell>
                 <TableCell className="pr-6 text-right">
-                  <span className="font-mono font-semibold text-sm">
-                    {rate.rate.toFixed(4)}
-                  </span>
+                  <span className="font-mono font-semibold text-sm">{rate.rate.toFixed(4)}</span>
                   <span className="ml-1 text-xs text-muted-foreground">BYN</span>
                 </TableCell>
               </TableRow>

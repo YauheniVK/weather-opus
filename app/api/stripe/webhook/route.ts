@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { stripe, tierFromPriceId } from "@/lib/stripe";
 import { updateProfileByStripeCustomer } from "@/lib/supabase";
 import type Stripe from "stripe";
 
@@ -54,8 +54,11 @@ export async function POST(request: NextRequest) {
             (subscription as any).current_period_start * 1000
           ).toISOString();
 
+          const priceId = subscription.items.data[0]?.price?.id;
+          const tier = priceId ? tierFromPriceId(priceId) : "premium";
+
           await updateProfileByStripeCustomer(customerId, {
-            subscription_status: "premium",
+            subscription_status: tier,
             subscription_start: currentPeriodStart,
             subscription_end: currentPeriodEnd,
             stripe_subscription_id: subscription.id,
@@ -72,8 +75,11 @@ export async function POST(request: NextRequest) {
           (subscription as any).current_period_end * 1000
         ).toISOString();
 
+        const priceId = subscription.items.data[0]?.price?.id;
+        const tier = priceId ? tierFromPriceId(priceId) : "premium";
+
         await updateProfileByStripeCustomer(customerId, {
-          subscription_status: isActive ? "premium" : "free",
+          subscription_status: isActive ? tier : "free",
           subscription_end: isActive ? currentPeriodEnd : null,
           stripe_subscription_id: subscription.id,
         });

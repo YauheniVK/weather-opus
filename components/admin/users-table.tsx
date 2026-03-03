@@ -10,9 +10,11 @@ import {
   Ban,
   CheckCircle,
   Crown,
+  Gem,
   User,
   Loader2,
   RefreshCw,
+  Infinity,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -178,6 +180,8 @@ export function AdminUsersTable() {
               <TableHead className="pl-4">User</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Subscription</TableHead>
+              <TableHead>Purchased</TableHead>
+              <TableHead>Expires</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Joined</TableHead>
               <TableHead className="text-right pr-4">Actions</TableHead>
@@ -187,7 +191,7 @@ export function AdminUsersTable() {
             {isLoading ? (
               Array.from({ length: 8 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
+                  {Array.from({ length: 8 }).map((_, j) => (
                     <TableCell key={j}>
                       <Skeleton className="h-5 w-full" />
                     </TableCell>
@@ -196,7 +200,7 @@ export function AdminUsersTable() {
               ))
             ) : users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   No users found
                 </TableCell>
               </TableRow>
@@ -231,13 +235,41 @@ export function AdminUsersTable() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {user.subscription_status === "premium" ? (
+                    {user.subscription_status === "elite" ? (
+                      <Badge className="gap-1 bg-purple-500/15 text-purple-400 border-purple-500/30">
+                        <Gem className="h-3 w-3" />
+                        Elite
+                      </Badge>
+                    ) : user.subscription_status === "premium" ? (
                       <Badge variant="premium" className="gap-1">
                         <Crown className="h-3 w-3" />
                         Premium
                       </Badge>
                     ) : (
                       <Badge variant="free">Free</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                    {user.subscription_start
+                      ? format(new Date(user.subscription_start), "dd.MM.yyyy")
+                      : "—"}
+                  </TableCell>
+                  <TableCell className="text-sm whitespace-nowrap">
+                    {user.subscription_status === "free" ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : user.subscription_end ? (
+                      <span className={
+                        new Date(user.subscription_end) < new Date()
+                          ? "text-red-400"
+                          : "text-muted-foreground"
+                      }>
+                        {format(new Date(user.subscription_end), "dd.MM.yyyy")}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Infinity className="h-3 w-3" />
+                        бессрочно
+                      </span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -253,8 +285,8 @@ export function AdminUsersTable() {
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {format(new Date(user.created_at), "MMM d, yyyy")}
+                  <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                    {format(new Date(user.created_at), "dd.MM.yyyy")}
                   </TableCell>
                   <TableCell className="text-right pr-4">
                     <div className="flex items-center justify-end gap-1">
@@ -351,9 +383,38 @@ export function AdminUsersTable() {
                 <SelectContent>
                   <SelectItem value="free">Free</SelectItem>
                   <SelectItem value="premium">Premium</SelectItem>
+                  <SelectItem value="elite">Elite</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {selectedUser && selectedUser.subscription_status !== "free" && (
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Expires</span>
+                  <span className="font-medium">
+                    {selectedUser.subscription_end
+                      ? format(new Date(selectedUser.subscription_end), "dd.MM.yyyy HH:mm")
+                      : "Бессрочно (admin)"}
+                  </span>
+                </div>
+                {selectedUser.subscription_start && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Started</span>
+                    <span className="font-medium">
+                      {format(new Date(selectedUser.subscription_start), "dd.MM.yyyy HH:mm")}
+                    </span>
+                  </div>
+                )}
+                {selectedUser.stripe_customer_id && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Stripe ID</span>
+                    <span className="font-mono text-xs">
+                      {selectedUser.stripe_customer_id}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Account Status</Label>
               <Select

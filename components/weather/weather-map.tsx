@@ -1,8 +1,8 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { useState, useEffect, useRef } from "react";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { Thermometer, Cloud, CloudRain } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +25,35 @@ const LAYERS: { id: WeatherLayer; label: string; icon: React.ReactNode }[] = [
   { id: "clouds_new", label: "Clouds", icon: <Cloud className="h-3.5 w-3.5" /> },
   { id: "precipitation_new", label: "Rain", icon: <CloudRain className="h-3.5 w-3.5" /> },
 ];
+
+/** Imperatively swaps the OWM overlay layer when `layer` changes. */
+function WeatherOverlay({ layer }: { layer: WeatherLayer }) {
+  const map = useMap();
+  const tileRef = useRef<L.TileLayer | null>(null);
+
+  useEffect(() => {
+    // Remove previous layer
+    if (tileRef.current) {
+      map.removeLayer(tileRef.current);
+    }
+    // Add new layer
+    const tileLayer = L.tileLayer(
+      `/api/weather/tile?layer=${layer}&z={z}&x={x}&y={y}`,
+      { opacity: 0.6, attribution: "© OpenWeatherMap" },
+    );
+    tileLayer.addTo(map);
+    tileRef.current = tileLayer;
+
+    return () => {
+      if (tileRef.current) {
+        map.removeLayer(tileRef.current);
+        tileRef.current = null;
+      }
+    };
+  }, [map, layer]);
+
+  return null;
+}
 
 interface WeatherMapProps {
   lat: number;
@@ -68,12 +97,7 @@ export default function WeatherMap({ lat, lon, data }: WeatherMapProps) {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            <TileLayer
-              key={activeLayer}
-              url={`/api/weather/tile?layer=${activeLayer}&z={z}&x={x}&y={y}`}
-              attribution='&copy; <a href="https://openweathermap.org">OpenWeatherMap</a>'
-              opacity={0.6}
-            />
+            <WeatherOverlay layer={activeLayer} />
             <Marker position={[lat, lon]} icon={markerIcon}>
               <Popup>
                 <div className="text-sm space-y-1 min-w-[140px]">

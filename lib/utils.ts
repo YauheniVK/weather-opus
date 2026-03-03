@@ -65,18 +65,34 @@ export function formatSubscriptionDate(dateStr: string | null): string {
   });
 }
 
+export type SubscriptionTier = "free" | "premium" | "elite";
+
 export function isPremiumExpired(subscriptionEnd: string | null): boolean {
   if (!subscriptionEnd) return true;
   return new Date(subscriptionEnd) < new Date();
 }
 
+export function getActiveTier(
+  status: string,
+  subscriptionEnd: string | null
+): SubscriptionTier {
+  if (status === "elite") {
+    if (!subscriptionEnd) return "elite"; // admin-granted, no expiry
+    return isPremiumExpired(subscriptionEnd) ? "free" : "elite";
+  }
+  if (status === "premium") {
+    if (!subscriptionEnd) return "premium"; // admin-granted, no expiry
+    return isPremiumExpired(subscriptionEnd) ? "free" : "premium";
+  }
+  return "free";
+}
+
+/** Backward-compat: returns true for premium OR elite (i.e. "at least premium"). */
 export function isActivePremium(
   status: string,
   subscriptionEnd: string | null
 ): boolean {
-  if (status !== "premium") return false;
-  if (!subscriptionEnd) return true; // no expiry = admin-granted, treat as active
-  return !isPremiumExpired(subscriptionEnd);
+  return getActiveTier(status, subscriptionEnd) !== "free";
 }
 
 export function getWeatherIconUrl(icon: string, size: "1x" | "2x" | "4x" = "2x"): string {

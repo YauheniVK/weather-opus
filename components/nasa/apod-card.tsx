@@ -68,14 +68,36 @@ export function ApodCard({ data, isLoading, error }: ApodCardProps) {
 
       <CardContent className="space-y-4">
         {data.media_type === "video" ? (
-          <div className="relative w-full overflow-hidden rounded-xl bg-muted" style={{ paddingBottom: "56.25%" }}>
-            <iframe
+          /youtube\.com|youtu\.be|vimeo\.com/i.test(data.url) ? (
+            <div className="relative w-full overflow-hidden rounded-xl bg-muted" style={{ paddingBottom: "56.25%" }}>
+              <iframe
+                src={data.url}
+                title={data.title}
+                className="absolute inset-0 h-full w-full"
+                allowFullScreen
+              />
+            </div>
+          ) : /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(data.url) ? (
+            <video
               src={data.url}
-              title={data.title}
-              className="absolute inset-0 h-full w-full"
-              allowFullScreen
+              controls
+              className="w-full rounded-xl bg-muted max-h-[520px]"
+              preload="metadata"
             />
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-xl bg-muted h-48 gap-3">
+              <p className="text-sm text-muted-foreground">Video cannot be embedded</p>
+              <a
+                href={data.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Watch Video
+              </a>
+            </div>
+          )
         ) : (
           <div className="overflow-hidden rounded-xl bg-muted">
             {/* eslint-disable-next-line @next/next/no-img-element */}

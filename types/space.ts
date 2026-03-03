@@ -39,10 +39,12 @@ export interface Planet {
   name: string;
   nameEn: string;
   angle: number;
-  distance: number;
+  distance: number;       // semi-major axis (AU)
   color: string;
   size: number;
-  orbitalPeriod: number; // Earth years
+  orbitalPeriod: number;  // Earth years
+  eccentricity: number;   // orbital eccentricity
+  perihelionLon: number;  // longitude of perihelion (ecliptic degrees)
 }
 
 export interface Voyager {

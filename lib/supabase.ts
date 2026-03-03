@@ -84,37 +84,6 @@ export async function getProfileByEmail(
 
   if (error || !profile) return null;
 
-  // Overlay subscription data from the legacy User + Subscription tables
-  try {
-    const { data: user } = await db
-      .from("User")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (user?.id) {
-      const { data: sub } = await db
-        .from("Subscription")
-        .select("tier, stripeCustomerId, stripeSubscriptionId, stripeCurrentPeriodEnd, endDate")
-        .eq("userId", user.id)
-        .order("createdAt", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (sub) {
-        return {
-          ...profile,
-          subscription_status: sub.tier === "PREMIUM" ? "premium" : "free",
-          subscription_end: sub.stripeCurrentPeriodEnd ?? sub.endDate ?? profile.subscription_end,
-          stripe_customer_id: sub.stripeCustomerId ?? profile.stripe_customer_id,
-          stripe_subscription_id: sub.stripeSubscriptionId ?? profile.stripe_subscription_id,
-        } as UserProfile;
-      }
-    }
-  } catch {
-    // Legacy tables not accessible — fall back to profiles data
-  }
-
   return profile as UserProfile;
 }
 

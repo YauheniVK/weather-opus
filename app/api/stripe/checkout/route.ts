@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerProfile } from "@/lib/auth-server";
-import { stripe, createOrRetrieveCustomer, createCheckoutSession, SUBSCRIPTION_PLANS } from "@/lib/stripe";
+import { createOrRetrieveCustomer, createCheckoutSession, SUBSCRIPTION_PLANS } from "@/lib/stripe";
 import { updateProfile } from "@/lib/supabase";
 
 export async function POST(request: NextRequest) {

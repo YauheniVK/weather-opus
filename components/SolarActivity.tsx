@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { SOLAR_FLARES, GEOMAGNETIC_STORM } from "@/lib/mockData";
 import type { SolarFlare, StormColor } from "@/types/space";
 
@@ -22,6 +24,10 @@ interface DonkiData {
   flares:    DonkiFlare[];
   storm:     DonkiStorm;
   fetchedAt: string;
+}
+
+interface SolarActivityProps {
+  layout?: "wide" | "compact";
 }
 
 // ─── Flare class → color token ────────────────────────────────────────────────
@@ -72,16 +78,16 @@ function FlareRow({ flare }: { flare: DonkiFlare }) {
     : "—";
 
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-white/5 px-4 py-3">
+    <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-4 py-3">
       <span className={`shrink-0 rounded border px-2 py-0.5 text-xs font-bold font-mono ${colors.badge}`}>
         {flare.flareClass}
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-white/80 truncate">{label}</p>
-        <p className="text-xs text-white/40">Регион {flare.region}</p>
+        <p className="text-sm text-foreground truncate">{label}</p>
+        <p className="text-xs text-muted-foreground">Регион {flare.region}</p>
       </div>
       {flare.duration != null && (
-        <span className="shrink-0 text-xs text-white/40 font-mono">{flare.duration} мин</span>
+        <span className="shrink-0 text-xs text-muted-foreground font-mono">{flare.duration} мин</span>
       )}
       <span className={`shrink-0 h-2 w-2 rounded-full ${colors.dot}`} />
     </div>
@@ -91,19 +97,19 @@ function FlareRow({ flare }: { flare: DonkiFlare }) {
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
 function SkeletonRow() {
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-white/5 px-4 py-3 animate-pulse">
-      <div className="h-6 w-12 rounded bg-white/10" />
+    <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-4 py-3 animate-pulse">
+      <div className="h-6 w-12 rounded bg-muted" />
       <div className="flex-1 space-y-1.5">
-        <div className="h-3 w-32 rounded bg-white/10" />
-        <div className="h-2 w-20 rounded bg-white/10" />
+        <div className="h-3 w-32 rounded bg-muted" />
+        <div className="h-2 w-20 rounded bg-muted" />
       </div>
-      <div className="h-2 w-2 rounded-full bg-white/10" />
+      <div className="h-2 w-2 rounded-full bg-muted" />
     </div>
   );
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export function SolarActivity() {
+export function SolarActivity({ layout = "wide" }: SolarActivityProps) {
   const [data,    setData]    = useState<DonkiData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -114,7 +120,6 @@ export function SolarActivity() {
       .then((json: DonkiData) => { if (!cancelled) { setData(json); setLoading(false); } })
       .catch(() => {
         if (!cancelled) {
-          // Fallback to mock data on error
           setData({
             flares: SOLAR_FLARES.map((f) => ({ ...f, duration: f.duration ?? null })),
             storm:  GEOMAGNETIC_STORM,
@@ -130,27 +135,85 @@ export function SolarActivity() {
   const storm  = data?.storm  ?? GEOMAGNETIC_STORM;
   const styles = STORM_STYLES[storm.color];
 
+  // ── Compact layout (for Weather sidebar) ──────────────────────────────────
+  if (layout === "compact") {
+    return (
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-semibold">
+              Космическая погода
+            </CardTitle>
+            {data?.fetchedAt && (
+              <span className="text-[10px] text-muted-foreground/60 font-mono">
+                NASA DONKI · {new Date(data.fetchedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* ── Storm indicator (compact horizontal) ── */}
+          <div className={`rounded-lg border ${styles.border} bg-muted/30 p-3 flex items-center gap-3`}>
+            <span
+              className={`shrink-0 h-3 w-3 rounded-full ${styles.dot}`}
+              style={{ boxShadow: "0 0 8px 2px currentColor" }}
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className={`text-lg font-bold ${styles.text}`}>{storm.level}</span>
+                <span className={`text-xs font-medium ${styles.text}`}>{storm.description}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {storm.level === "G0"
+                  ? "Обстановка спокойная"
+                  : `Воздействие на спутники и электросети`}
+              </p>
+            </div>
+            {loading && <div className="h-2 w-2 rounded-full bg-muted-foreground/30 animate-pulse" />}
+          </div>
+
+          <Separator />
+
+          {/* ── Flares ── */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Вспышки за 7 дней</p>
+            {loading ? (
+              [0, 1, 2].map((i) => <SkeletonRow key={i} />)
+            ) : flares.length === 0 ? (
+              <p className="rounded-lg bg-muted/50 px-4 py-4 text-sm text-muted-foreground text-center">
+                Вспышек не зафиксировано
+              </p>
+            ) : (
+              flares.map((f, i) => <FlareRow key={i} flare={f} />)
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ── Wide layout (original grid) ───────────────────────────────────────────
   return (
     <div className="grid gap-4 lg:grid-cols-3">
 
       {/* ── Flares panel ─────────────────────────────────────────────────── */}
       <div className="lg:col-span-2 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-amber-400/70">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-amber-600 dark:text-amber-400/70">
             Солнечная активность
           </h2>
           {data?.fetchedAt && (
-            <span className="text-[10px] text-white/25 font-mono">
+            <span className="text-[10px] text-muted-foreground/60 font-mono">
               NASA DONKI · {new Date(data.fetchedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
         </div>
-        <p className="text-xs text-white/40">Вспышки за последние 7 дней</p>
+        <p className="text-xs text-muted-foreground">Вспышки за последние 7 дней</p>
         <div className="space-y-2">
           {loading ? (
             [0, 1, 2].map((i) => <SkeletonRow key={i} />)
           ) : flares.length === 0 ? (
-            <p className="rounded-lg bg-white/5 px-4 py-4 text-sm text-white/40 text-center">
+            <p className="rounded-lg bg-muted/50 px-4 py-4 text-sm text-muted-foreground text-center">
               Вспышек не зафиксировано
             </p>
           ) : (
@@ -160,10 +223,10 @@ export function SolarActivity() {
       </div>
 
       {/* ── Storm card ───────────────────────────────────────────────────── */}
-      <div className={`rounded-xl border ${styles.border} bg-white/5 p-5 flex flex-col justify-center space-y-3`}>
+      <div className={`rounded-xl border ${styles.border} bg-muted/50 p-5 flex flex-col justify-center space-y-3`}>
         <div className="flex items-center justify-between">
-          <p className="text-xs text-white/40 uppercase tracking-widest">Геомагнитная буря</p>
-          {loading && <div className="h-2 w-2 rounded-full bg-white/20 animate-pulse" />}
+          <p className="text-xs text-muted-foreground uppercase tracking-widest">Геомагнитная буря</p>
+          {loading && <div className="h-2 w-2 rounded-full bg-muted-foreground/30 animate-pulse" />}
         </div>
 
         <div className="flex items-center gap-3">

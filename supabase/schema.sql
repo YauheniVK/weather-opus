@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   role                  TEXT NOT NULL DEFAULT 'user'
                           CHECK (role IN ('user', 'admin')),
   subscription_status   TEXT NOT NULL DEFAULT 'free'
-                          CHECK (subscription_status IN ('free', 'premium')),
+                          CHECK (subscription_status IN ('free', 'premium', 'elite')),
   subscription_start    TIMESTAMPTZ,
   subscription_end      TIMESTAMPTZ,
   stripe_customer_id    TEXT UNIQUE,

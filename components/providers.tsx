@@ -11,7 +11,7 @@ import {
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { isActivePremium } from "@/lib/utils";
+import { getActiveTier, type SubscriptionTier } from "@/lib/utils";
 import type { UserProfile } from "@/types";
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -19,7 +19,9 @@ import type { UserProfile } from "@/types";
 interface ProfileContextValue {
   profile: UserProfile | null;
   loading: boolean;
+  tier: SubscriptionTier;
   isPremium: boolean;
+  isElite: boolean;
   isAdmin: boolean;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -28,7 +30,9 @@ interface ProfileContextValue {
 const ProfileContext = createContext<ProfileContextValue>({
   profile: null,
   loading: true,
+  tier: "free",
   isPremium: false,
+  isElite: false,
   isAdmin: false,
   signOut: async () => {},
   refresh: async () => {},
@@ -87,15 +91,17 @@ export function Providers({ children }: { children: ReactNode }) {
     window.location.href = "/";
   };
 
-  const isPremium = isActivePremium(
+  const tier = getActiveTier(
     profile?.subscription_status ?? "free",
     profile?.subscription_end ?? null
   );
+  const isPremium = tier !== "free";
+  const isElite = tier === "elite";
   const isAdmin = profile?.role === "admin";
 
   return (
     <ProfileContext.Provider
-      value={{ profile, loading, isPremium, isAdmin, signOut, refresh: fetchProfile }}
+      value={{ profile, loading, tier, isPremium, isElite, isAdmin, signOut, refresh: fetchProfile }}
     >
       <ThemeProvider
         attribute="class"
@@ -104,7 +110,7 @@ export function Providers({ children }: { children: ReactNode }) {
         disableTransitionOnChange
       >
         {children}
-        <Toaster position="top-right" richColors closeButton theme="system" />
+        <Toaster position="bottom-right" richColors closeButton theme="system" />
       </ThemeProvider>
     </ProfileContext.Provider>
   );

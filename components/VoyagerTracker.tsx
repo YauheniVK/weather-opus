@@ -1,12 +1,10 @@
 "use client";
 
-import { VOYAGERS } from "@/lib/mockData";
+import { PROBES } from "@/lib/mockData";
 import type { Voyager } from "@/types/space";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const KM_PER_AU       = 149_597_870.7;
-const LIGHT_SPEED_KMS = 299_792;
-const MS_PER_YEAR     = 1000 * 60 * 60 * 24 * 365.25;
+const MS_PER_YEAR = 1000 * 60 * 60 * 24 * 365.25;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function yearsInTransit(launched: string): string {
@@ -22,76 +20,107 @@ function yearsLabel(y: string): string {
   return "лет";
 }
 
-function distanceBillionKm(au: number): string {
-  return ((au * KM_PER_AU) / 1_000_000_000).toFixed(2);
+// Probe accent colors (matching SolarSystemMap)
+const PROBE_COLOR: Record<string, string> = {
+  "Pioneer 10":         "#FFB347",
+  "Pioneer 11":         "#FFB347",
+  "Voyager 1":          "#FF6B6B",
+  "Voyager 2":          "#FF6B6B",
+  "Cassini":            "#9B7DFF",
+  "MESSENGER":          "#00CED1",
+  "New Horizons":       "#7BE87B",
+  "Parker Solar Probe": "#FFD700",
+};
+
+// Mission status info
+const MISSION_STATUS: Record<string, { status: string; note: string; color: string }> = {
+  "Pioneer 10":         { status: "Завершена",  note: "Находится в межзвёздном пространстве, связь потеряна 23.01.2003",  color: "#ef4444" },
+  "Pioneer 11":         { status: "Завершена",  note: "Находится в межзвёздном пространстве, связь потеряна 30.11.1995",  color: "#ef4444" },
+  "Voyager 1":          { status: "Активна",    note: "Находится в межзвёздном пространстве, на связи",                   color: "#22c55e" },
+  "Voyager 2":          { status: "Активна",    note: "Находится в межзвёздном пространстве, на связи",                   color: "#22c55e" },
+  "Cassini":            { status: "Завершена",  note: "Направлен в атмосферу Сатурна, сгорел 15.09.2017 после 13 лет на орбите",  color: "#ef4444" },
+  "MESSENGER":          { status: "Завершена",  note: "Израсходовал топливо, упал на поверхность Меркурия 30.04.2015",          color: "#ef4444" },
+  "New Horizons":       { status: "Активна",    note: "Находится в поясе Койпера, на связи",                              color: "#22c55e" },
+  "Parker Solar Probe": { status: "Активна",    note: "Изучает солнечную корону, на связи",                               color: "#22c55e" },
+};
+
+const MONTH_GEN = [
+  "января","февраля","марта","апреля","мая","июня",
+  "июля","августа","сентября","октября","ноября","декабря",
+];
+
+function formatLaunchDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d} ${MONTH_GEN[m - 1]} ${y}`;
 }
 
-function signalTravelTime(au: number): string {
-  const seconds = (au * KM_PER_AU) / LIGHT_SPEED_KMS;
-  const hours   = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  return `${hours}ч ${minutes}м`;
+function formatDist(au: number): string {
+  return au < 1 ? au.toFixed(3) : au.toFixed(1);
 }
 
-function launchYear(launched: string): string {
-  return new Date(launched).getFullYear().toString();
-}
-
-// ─── Compact stat row ─────────────────────────────────────────────────────────
-function StatRow({
-  label,
-  value,
-  sub,
-  color,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  color: string;
-}) {
+// ─── Data row ────────────────────────────────────────────────────────────────
+function DataRow({ label, value, valueColor }: { label: string; value: string; valueColor: string }) {
   return (
-    <div className="flex items-center justify-between gap-6 py-1.5 border-b border-white/5 last:border-0">
-      <span className="text-xs text-white/40 shrink-0">{label}</span>
-      <div className="text-right">
-        <span className={`text-sm font-bold ${color}`}>{value}</span>
-        {sub && <p className="text-[10px] text-white/30 mt-0.5">{sub}</p>}
-      </div>
+    <div>
+      <p className="text-[11px] text-white/35 leading-none mb-1">{label}</p>
+      <p className="text-[15px] font-bold font-mono tabular-nums leading-none" style={{ color: valueColor }}>
+        {value}
+      </p>
     </div>
   );
 }
 
-// ─── Single card ──────────────────────────────────────────────────────────────
-function VoyagerCard({ voyager }: { voyager: Voyager }) {
+// ─── Probe card ──────────────────────────────────────────────────────────────
+function ProbeCard({ probe }: { probe: Voyager }) {
+  const yrs    = yearsInTransit(probe.launched);
+  const color  = PROBE_COLOR[probe.name] ?? "#FF6B6B";
+  const status = MISSION_STATUS[probe.name];
+  const ended  = status && status.status === "Завершена";
+
   return (
-    <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 space-y-2">
-      <div className="flex items-center justify-between mb-1">
-        <h3 className="font-semibold text-white text-sm">{voyager.name}</h3>
-        <span className="text-xs text-red-400/60 font-mono">запущен {launchYear(voyager.launched)}</span>
+    <div
+      className="flex-1 min-w-0 rounded-lg border px-3 py-3"
+      style={{
+        borderColor: `${color}33`,
+        backgroundColor: `${color}0D`,
+      }}
+      title={probe.name}
+    >
+      {/* Header: name + launch date */}
+      <div className="mb-2.5 min-w-0">
+        <div className="flex items-baseline gap-1">
+          <h3
+            className="font-bold text-sm leading-tight truncate"
+            style={{ color }}
+          >
+            {probe.name}
+          </h3>
+          {ended && (
+            <span className="text-[9px] text-white/30 flex-shrink-0">†</span>
+          )}
+        </div>
+        <p className="text-[11px] text-white/35 font-mono truncate">{formatLaunchDate(probe.launched)}</p>
       </div>
 
-      <StatRow
-        label="Расстояние"
-        value={`${voyager.distance} AU`}
-        sub={`${distanceBillionKm(voyager.distance)} млрд км`}
-        color="text-red-400"
-      />
-      <StatRow
-        label="Скорость"
-        value={`${voyager.speed} км/с`}
-        color="text-violet-400"
-      />
-      <StatRow
-        label="Сигнал до Земли"
-        value={signalTravelTime(voyager.distance)}
-        sub="при скорости света"
-        color="text-amber-400"
-      />
-      <StatRow
-        label="В пути"
-        value={`${yearsInTransit(voyager.launched)} ${yearsLabel(yearsInTransit(voyager.launched))}`}
-        sub={`с ${voyager.launched}`}
-        color="text-blue-400"
-      />
+      {/* Data rows */}
+      <div className="flex flex-col gap-3">
+        <DataRow label="Расстояние" value={`${formatDist(probe.distance)} AU`} valueColor="#f87171" />
+        <DataRow
+          label="Скорость"
+          value={probe.speed > 0 ? `${probe.speed.toFixed(1)} км/с` : "—"}
+          valueColor="#a78bfa"
+        />
+        <DataRow label="В пути" value={`${yrs} ${yearsLabel(yrs)}`} valueColor="#60a5fa" />
+        {status && (
+          <div>
+            <p className="text-[11px] text-white/35 leading-none mb-1">Статус миссии</p>
+            <p className="text-[12px] font-semibold leading-none" style={{ color: status.color }}>
+              {status.status}
+            </p>
+            <p className="text-[10px] text-white/40 mt-1.5 leading-tight">{status.note}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -99,13 +128,13 @@ function VoyagerCard({ voyager }: { voyager: Voyager }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 export function VoyagerTracker() {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <h2 className="text-sm font-semibold uppercase tracking-widest text-red-400/70">
-        Межзвёздные зонды
+        Космические зонды
       </h2>
-      <div className="flex flex-col gap-3">
-        {VOYAGERS.map((v) => (
-          <VoyagerCard key={v.name} voyager={v} />
+      <div className="flex gap-2">
+        {PROBES.map((v) => (
+          <ProbeCard key={v.name} probe={v} />
         ))}
       </div>
     </div>

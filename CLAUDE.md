@@ -34,14 +34,41 @@ Full-stack Next.js 14+ web application with multiple feature modules:
 
 ---
 
-## Free vs Premium
+## Three-Tier Subscription System (Free / Premium / Elite)
 
-| Feature | Free | Premium |
-|---|---|---|
-| Weather forecast | 2 days | 7 days |
-| Currency rates | 5 currencies | 10 currencies |
-| Cross-rates panel | Blurred | Full access |
-| Space dashboard | Full access | Full access |
+| Feature | Free | Premium ($5.99/mo) | Elite ($19.99/mo) |
+|---|:---:|:---:|:---:|
+| Currency rates (5 basic) | ✓ | ✓ | ✓ |
+| Weather current + map | ✓ | ✓ | ✓ |
+| 2-day forecast | ✓ | ✓ | ✓ |
+| Currency converter | — | ✓ | ✓ |
+| 10 currencies + cross-rates | — | ✓ | ✓ |
+| 7-day forecast | — | ✓ | ✓ |
+| Solar activity (weather tab) | — | ✓ | ✓ |
+| Space: static mode (Сегодня/По дате) | — | ✓ | ✓ |
+| Space: animation + ephemeris | — | — | ✓ |
+| APOD (photo of the day) | — | — | ✓ |
+| Space tab visibility | Locked + CTA | Full | Full |
+
+### Tier logic (`lib/utils.ts`)
+- `SubscriptionTier = "free" | "premium" | "elite"`
+- `getActiveTier(status, subscriptionEnd)` — returns effective tier (checks expiry)
+- `isActivePremium()` — backward compat, returns true for premium OR elite
+- `subscription_end = null` → admin-granted, treated as active (no expiry)
+
+### Provider context (`components/providers.tsx`)
+- `useProfile()` returns: `tier`, `isPremium` (tier >= premium), `isElite` (tier === elite), `isAdmin`
+
+### Stripe plans (`lib/stripe.ts`)
+- 4 plans: `premium-monthly`, `premium-annual`, `elite-monthly`, `elite-annual`
+- `tierFromPriceId(priceId)` — maps Stripe price ID → "premium" | "elite"
+- Webhook + sync routes use `tierFromPriceId()` to set correct `subscription_status`
+
+### Feature gating in SpaceDashboard
+- `isElite` prop controls access to animation mode + DataLoader
+- Non-elite: "Анимация" button disabled with lock icon
+- Premium: static mode only (Сегодня/По дате)
+- Free: entire Space tab locked with upgrade CTA
 
 ---
 
@@ -122,6 +149,23 @@ Positioned at r=375 (outside Neptune orbit), with 4° angular offset from bounda
 ### Stars (CSS, not SVG)
 Stars are **CSS `box-shadow`** on `.space-starfield::before` in SpaceDashboard.tsx — NOT SVG elements inside SolarSystemMap. All 220 stars are 1px dots (0 spread) with opacity 0.18–0.43. Do NOT try to edit stars in SolarSystemMap.tsx.
 
+### Probe radius formula (`probeRadius()` in SolarSystemMap.tsx)
+
+**DO NOT change `LOG_MIN = Math.log10(0.39)` — all planet orbit rings are anchored to it.**
+
+`probeRadius(d)` has four zones:
+1. `d ≤ 0.04 AU` → clamp to 8px
+2. `0.04–0.39 AU` → **cubic Hermite spline**: slope=0 at d=0.04, slope=log-derivative at d=0.39 (C¹ continuous, no kink). Planet rings unchanged.
+3. `0.39–30.07 AU` → `orbitRadius(d)` (standard log scale)
+4. `> 30.07 AU` → smooth log extension to VOYAGER_R=355px
+
+Why Hermite (not extending LOG_MIN or power law):
+- Extending LOG_MIN to 0.04 shifts all planet rings outward (Mercury 30→130px) — unacceptable
+- Power law with 3 anchors compresses inner planets ~45% — unacceptable
+- Hermite: only probe positions inside Mercury's orbit change; all planet rings stay fixed
+
+Trail rendering: `buildTrailSegments()` skips points with `distance < 0.04`. Skip threshold must stay at 0.04 (NOT 0.39 — that hides 51 days/orbit of MESSENGER, causing spiral artifacts).
+
 ---
 
 ## NASA JPL Horizons Integration
@@ -132,18 +176,24 @@ Stars are **CSS `box-shadow`** on `.space-starfield::before` in SpaceDashboard.t
 Fetches from `https://ssd.jpl.nasa.gov/api/horizons.api` server-side.
 
 ### Bodies
-| ID | Body |
-|---|---|
-| 199 | Mercury |
-| 299 | Venus |
-| 399 | Earth |
-| 499 | Mars |
-| 599 | Jupiter |
-| 699 | Saturn |
-| 799 | Uranus |
-| 899 | Neptune |
-| Voyager_1 | Voyager 1 |
-| Voyager_2 | Voyager 2 |
+| ID | Body | Notes |
+|---|---|---|
+| 199 | Mercury | |
+| 299 | Venus | |
+| 399 | Earth | |
+| 499 | Mars | |
+| 599 | Jupiter | |
+| 699 | Saturn | |
+| 799 | Uranus | |
+| 899 | Neptune | |
+| Pioneer_10 | Pioneer 10 | ephemeris ends 2003-01-23 |
+| Pioneer_11 | Pioneer 11 | ephemeris ends 1995-11-30 |
+| Voyager_1 | Voyager 1 | |
+| Voyager_2 | Voyager 2 | |
+| Cassini | Cassini | ephemeris ends 2017-09-15 |
+| MESSENGER | MESSENGER | ephemeris ends 2015-05-01 |
+| New_Horizons | New Horizons | |
+| Parker_Solar_Probe | Parker Solar Probe | perihelion ≈ 0.046 AU |
 
 ### SpacePoint fields
 ```ts
@@ -217,8 +267,10 @@ OPENWEATHER_API_KEY
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
-STRIPE_MONTHLY_PRICE_ID
-STRIPE_ANNUAL_PRICE_ID
+STRIPE_PREMIUM_MONTHLY_PRICE_ID
+STRIPE_PREMIUM_ANNUAL_PRICE_ID
+STRIPE_ELITE_MONTHLY_PRICE_ID
+STRIPE_ELITE_ANNUAL_PRICE_ID
 ADMIN_EMAILS
 NEXT_PUBLIC_APP_URL
 NASA_API_KEY          # optional — for DONKI; falls back to DEMO_KEY (rate-limited)
@@ -232,4 +284,4 @@ NASA_API_KEY          # optional — for DONKI; falls back to DEMO_KEY (rate-lim
 - **Multiple ports**: old node processes linger. Kill via PowerShell: `Stop-Process -Id <PID> -Force`.
 - **`GET /dashboard 500` in dev logs** — harmless, caused by middleware redirect + Next.js SSR ErrorBoundary. Browser users are unaffected.
 - **CSS stars vs SVG stars**: the visible starfield is CSS box-shadow in SpaceDashboard.tsx, not SVG circles in SolarSystemMap.tsx. The SVG also has STAR_DATA but those are sub-pixel and barely visible.
-- **`isActivePremium`**: `subscription_end = null` means admin-granted premium with no expiry → treated as ACTIVE.
+- **`getActiveTier` / `isActivePremium`**: `subscription_end = null` means admin-granted tier with no expiry → treated as ACTIVE. Works for both premium and elite.

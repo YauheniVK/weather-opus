@@ -8,38 +8,70 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
-    id: "monthly",
+    id: "premium-monthly",
+    tier: "premium",
     name: "Premium Monthly",
-    price: 9.99,
+    price: 5.99,
     interval: "month",
-    priceId: process.env.STRIPE_MONTHLY_PRICE_ID!,
+    priceId: process.env.STRIPE_PREMIUM_MONTHLY_PRICE_ID!,
     features: [
       "7-day extended forecast",
-      "Ad-free experience",
-      "Save up to 10 cities",
-      "Priority support",
-      "Historical weather data",
-      "Weather alerts & notifications",
+      "Currency converter",
+      "10 currencies + cross-rates",
+      "Space weather panel",
+      "Solar system — static mode",
     ],
   },
   {
-    id: "annual",
+    id: "premium-annual",
+    tier: "premium",
     name: "Premium Annual",
-    price: 79.99,
+    price: 59.90,
     interval: "year",
-    priceId: process.env.STRIPE_ANNUAL_PRICE_ID!,
-    savings: "Save 33%",
+    priceId: process.env.STRIPE_PREMIUM_ANNUAL_PRICE_ID!,
+    savings: "Save 17%",
     features: [
       "7-day extended forecast",
-      "Ad-free experience",
-      "Save up to 10 cities",
-      "Priority support",
-      "Historical weather data",
-      "Weather alerts & notifications",
-      "Advanced analytics",
+      "Currency converter",
+      "10 currencies + cross-rates",
+      "Space weather panel",
+      "Solar system — static mode",
+    ],
+  },
+  {
+    id: "elite-monthly",
+    tier: "elite",
+    name: "Elite Monthly",
+    price: 19.99,
+    interval: "month",
+    priceId: process.env.STRIPE_ELITE_MONTHLY_PRICE_ID!,
+    features: [
+      "Everything in Premium",
+      "NASA ephemeris animation",
+      "Astronomy Photo of the Day",
+    ],
+  },
+  {
+    id: "elite-annual",
+    tier: "elite",
+    name: "Elite Annual",
+    price: 199.90,
+    interval: "year",
+    priceId: process.env.STRIPE_ELITE_ANNUAL_PRICE_ID!,
+    savings: "Save 17%",
+    features: [
+      "Everything in Premium",
+      "NASA ephemeris animation",
+      "Astronomy Photo of the Day",
     ],
   },
 ];
+
+/** Determine subscription tier from a Stripe price ID. */
+export function tierFromPriceId(priceId: string): "premium" | "elite" {
+  const plan = SUBSCRIPTION_PLANS.find((p) => p.priceId === priceId);
+  return plan?.tier ?? "premium";
+}
 
 export async function createOrRetrieveCustomer(
   email: string,

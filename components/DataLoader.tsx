@@ -1,16 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useSpaceData, BODIES } from "@/hooks/useSpaceData";
 import type { SpaceDataset, BodyData } from "@/types/space";
 
 // ─── Date helpers ──────────────────────────────────────────────────────────────
-// Horizons ephemeris for Voyager 1 starts 1977-09-06 (launched Sep 5 at 12:56 UTC;
-// midnight TDB on Sep 5 precedes the trajectory file start).
-const VOYAGER1_LAUNCH = "1977-09-06";
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function formatDateRU(iso: string): string {
@@ -199,21 +197,258 @@ function Terminal({
   );
 }
 
+// ─── Popup date picker (year / month / day with hold-to-repeat) ──────────────
+const MONTH_LABELS_RU_DL = [
+  "Январь","Февраль","Март","Апрель","Май","Июнь",
+  "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь",
+];
+
+function PopupDatePicker({
+  value,
+  onChange,
+  onClose,
+  align = "left",
+}: {
+  value: string;
+  onChange: (iso: string) => void;
+  onClose: () => void;
+  align?: "left" | "right";
+}) {
+  const [y, m, d] = value.split("-").map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+
+  const valRef = useRef({ y, m, d });
+  valRef.current = { y, m, d };
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const emitFrom = (ny: number, nm: number, nd: number) => {
+    const maxD = new Date(ny, nm, 0).getDate();
+    const fd   = Math.min(nd, maxD);
+    onChangeRef.current(`${ny}-${String(nm).padStart(2, "0")}-${String(fd).padStart(2, "0")}`);
+  };
+
+  type StepFn = (v: { y: number; m: number; d: number }) => void;
+  const stepFnRef = useRef<StepFn | null>(null);
+  const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ivRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearRepeat = useCallback(() => {
+    if (timerRef.current) { clearTimeout(timerRef.current);  timerRef.current = null; }
+    if (ivRef.current)    { clearInterval(ivRef.current);    ivRef.current = null; }
+    stepFnRef.current = null;
+  }, []);
+
+  const holdProps = (stepFn: StepFn) => ({
+    onPointerDown: () => {
+      stepFn(valRef.current);
+      stepFnRef.current = stepFn;
+      clearRepeat();
+      stepFnRef.current = stepFn;
+      timerRef.current = setTimeout(() => {
+        ivRef.current = setInterval(() => { stepFnRef.current?.(valRef.current); }, 120);
+      }, 400);
+    },
+    onPointerUp:     clearRepeat,
+    onPointerLeave:  clearRepeat,
+    onPointerCancel: clearRepeat,
+  });
+
+  useEffect(() => clearRepeat, [clearRepeat]);
+
+  // Close on click outside
+  const popupRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  // Close after cursor leaves for 3s
+  const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleMouseEnter = () => { if (leaveTimerRef.current) { clearTimeout(leaveTimerRef.current); leaveTimerRef.current = null; } };
+  const handleMouseLeave = () => { leaveTimerRef.current = setTimeout(onClose, 3000); };
+  useEffect(() => () => { if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current); }, []);
+
+  const yearDec:  StepFn = (v) => emitFrom(v.y - 1, v.m, v.d);
+  const yearInc:  StepFn = (v) => emitFrom(v.y + 1, v.m, v.d);
+  const monthDec: StepFn = (v) => emitFrom(v.m === 1 ? v.y - 1 : v.y, v.m === 1 ? 12 : v.m - 1, v.d);
+  const monthInc: StepFn = (v) => emitFrom(v.m === 12 ? v.y + 1 : v.y, v.m === 12 ? 1 : v.m + 1, v.d);
+  const dayDec: StepFn = (v) => {
+    if (v.d <= 1) {
+      const pm = v.m === 1 ? 12 : v.m - 1;
+      const py = v.m === 1 ? v.y - 1 : v.y;
+      emitFrom(py, pm, new Date(py, pm, 0).getDate());
+    } else { emitFrom(v.y, v.m, v.d - 1); }
+  };
+  const dayInc: StepFn = (v) => {
+    const max = new Date(v.y, v.m, 0).getDate();
+    if (v.d >= max) {
+      const nm = v.m === 12 ? 1 : v.m + 1;
+      const ny = v.m === 12 ? v.y + 1 : v.y;
+      emitFrom(ny, nm, 1);
+    } else { emitFrom(v.y, v.m, v.d + 1); }
+  };
+
+  const inputCls =
+    "w-full rounded-md border border-white/15 bg-white/5 px-2 py-1 text-xs text-white/80 text-center focus:outline-none focus:border-blue-500/50";
+  const arrowCls = "text-white/30 hover:text-white/70 text-xs px-1.5 shrink-0";
+  const lblCls   = "text-[10px] text-white/30 w-10 shrink-0";
+
+  return (
+    <div
+      ref={popupRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`absolute top-full ${align === "right" ? "right-0" : "left-0"} mt-1 z-30 rounded-lg border border-white/15 bg-black/95 backdrop-blur-md px-3 py-2.5 shadow-xl select-none space-y-1.5`}
+      style={{ width: 220 }}
+    >
+      {/* Year */}
+      <div className="flex items-center gap-1">
+        <span className={lblCls}>Год</span>
+        <button type="button" {...holdProps(yearDec)} className={arrowCls}>◀</button>
+        <input type="number" value={y}
+          onChange={(e) => { const v = parseInt(e.target.value); if (v) emitFrom(v, m, d); }}
+          className={inputCls} style={{ minWidth: 0 }}
+        />
+        <button type="button" {...holdProps(yearInc)} className={arrowCls}>▶</button>
+      </div>
+      {/* Month */}
+      <div className="flex items-center gap-1">
+        <span className={lblCls}>Месяц</span>
+        <button type="button" {...holdProps(monthDec)} className={arrowCls}>◀</button>
+        <select value={m} onChange={(e) => emitFrom(y, parseInt(e.target.value), d)}
+          className={inputCls + " appearance-none cursor-pointer"} style={{ minWidth: 0 }}
+        >
+          {MONTH_LABELS_RU_DL.map((l, i) => (
+            <option key={i} value={i + 1} className="bg-black text-white">{l}</option>
+          ))}
+        </select>
+        <button type="button" {...holdProps(monthInc)} className={arrowCls}>▶</button>
+      </div>
+      {/* Day */}
+      <div className="flex items-center gap-1">
+        <span className={lblCls}>День</span>
+        <button type="button" {...holdProps(dayDec)} className={arrowCls}>◀</button>
+        <input type="number" min={1} max={daysInMonth} value={d}
+          onChange={(e) => { const v = parseInt(e.target.value); if (v >= 1 && v <= daysInMonth) emitFrom(y, m, v); }}
+          className={inputCls} style={{ minWidth: 0 }}
+        />
+        <button type="button" {...holdProps(dayInc)} className={arrowCls}>▶</button>
+      </div>
+      {/* Footer */}
+      <div className="pt-0.5 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => {
+            const now = new Date();
+            emitFrom(now.getFullYear(), now.getMonth() + 1, now.getDate());
+          }}
+          className="text-[10px] text-blue-400/70 hover:text-blue-300 transition-colors"
+        >
+          Сегодня
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors text-xs"
+          title="Готово"
+        >
+          ✓
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Probe mission presets ───────────────────────────────────────────────────
+const PROBE_PRESETS: Array<{
+  name:  string;
+  start: string;
+  end:   string;
+  note:  string;
+  color: string;
+}> = [
+  { name: "Pioneer 10",         start: "1972-03-03", end: "2003-01-23", note: "связь потеряна",       color: "#FFB347" },
+  { name: "Pioneer 11",         start: "1973-04-06", end: "1995-11-30", note: "связь потеряна",       color: "#FFB347" },
+  { name: "Voyager 2",          start: "1977-08-20", end: todayISO(),   note: "активен",              color: "#FF6B6B" },
+  { name: "Voyager 1",          start: "1977-09-05", end: todayISO(),   note: "активен",              color: "#FF6B6B" },
+  { name: "Cassini",            start: "1997-10-15", end: "2017-09-15", note: "вход в атм. Сатурна",  color: "#9B7DFF" },
+  { name: "MESSENGER",          start: "2004-08-03", end: "2015-05-01", note: "падение на Меркурий",  color: "#00CED1" },
+  { name: "New Horizons",       start: "2006-01-19", end: todayISO(),   note: "активен",              color: "#7BE87B" },
+  { name: "Parker Solar Probe", start: "2018-08-12", end: todayISO(),   note: "активен",              color: "#FFD700" },
+];
+
+function ProbePresetsPopup({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (start: string, end: string) => void;
+  onClose:  () => void;
+}) {
+  const popupRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={popupRef}
+      className="absolute top-full right-0 mt-1 z-30 rounded-lg border border-white/15 bg-black/95 backdrop-blur-md px-2 py-2 shadow-xl select-none"
+      style={{ width: 300 }}
+    >
+      <p className="text-[10px] uppercase tracking-widest text-white/30 mb-1.5 px-1">Миссии зондов</p>
+      {PROBE_PRESETS.map((p) => {
+        const isActive = p.end === todayISO();
+        return (
+          <button
+            key={p.name}
+            type="button"
+            onClick={() => { onSelect(p.start, p.end); onClose(); }}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white/5 transition-colors text-left"
+          >
+            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: p.color }} />
+            <span className="flex-1 text-xs text-white/80 whitespace-nowrap">{p.name}</span>
+            <span className="text-xs text-white/40 font-mono whitespace-nowrap">
+              {p.start.replace(/-/g, ".")} – {p.end.replace(/-/g, ".")}
+            </span>
+          </button>
+        );
+      })}
+      <div className="border-t border-white/10 mt-1.5 pt-1.5 px-1">
+        <button
+          type="button"
+          onClick={() => { onSelect("1972-03-03", todayISO()); onClose(); }}
+          className="w-full text-left text-[10px] text-blue-400/70 hover:text-blue-300 transition-colors py-0.5"
+        >
+          Все зонды (1972 – сегодня)
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Date input form ───────────────────────────────────────────────────────────
 function DateForm({ onSubmit }: { onSubmit: (start: string, end: string) => void }) {
-  const [startDate, setStartDate] = useState(VOYAGER1_LAUNCH);
+  const [startDate, setStartDate] = useState("1977-08-21");
   const [endDate,   setEndDate]   = useState(todayISO());
   const [error,     setError]     = useState("");
+  const [openPicker, setOpenPicker] = useState<"start" | "end" | null>(null);
+  const [showProbes, setShowProbes] = useState(false);
 
   const validate = (): string | null => {
-    if (startDate < VOYAGER1_LAUNCH)
-      return `Начальная дата не может быть раньше запуска Voyager 1 (${VOYAGER1_LAUNCH})`;
     if (endDate > todayISO())
       return "Конечная дата не может быть позже сегодняшней";
     if (startDate >= endDate)
       return "Начальная дата должна быть раньше конечной";
-    if (yearsBetween(startDate, endDate) > 50)
-      return "Диапазон не может превышать 50 лет";
+    if (yearsBetween(startDate, endDate) > 100)
+      return "Диапазон не может превышать 100 лет";
     return null;
   };
 
@@ -225,35 +460,80 @@ function DateForm({ onSubmit }: { onSubmit: (start: string, end: string) => void
     onSubmit(startDate, endDate);
   };
 
+  const handlePresetSelect = (start: string, end: string) => {
+    setStartDate(start);
+    setEndDate(end);
+    setError("");
+  };
+
+  const dateBtnCls = (active: boolean) => [
+    "w-full rounded-md border px-3 py-1.5 text-sm text-left transition-colors",
+    active
+      ? "border-blue-500/40 bg-blue-500/10 text-blue-300"
+      : "border-white/15 bg-white/5 text-white/80 hover:border-white/25",
+  ].join(" ");
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <h3 className="text-sm font-semibold text-white/80">
-        Загрузка данных из NASA JPL Horizons
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-white/80">
+          Загрузка данных из NASA JPL Horizons
+        </h3>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowProbes(!showProbes)}
+            className={[
+              "px-2 py-1 rounded-md text-[10px] font-medium transition-colors border",
+              showProbes
+                ? "border-blue-500/40 bg-blue-500/10 text-blue-300"
+                : "border-white/15 text-white/40 hover:text-white/70 hover:border-white/25",
+            ].join(" ")}
+          >
+            Зонды
+          </button>
+          {showProbes && (
+            <ProbePresetsPopup
+              onSelect={handlePresetSelect}
+              onClose={() => setShowProbes(false)}
+            />
+          )}
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="space-y-1">
+        {/* Start date */}
+        <div className="space-y-1">
           <span className="text-xs text-white/50">Начальная дата</span>
-          <input
-            type="date"
-            value={startDate}
-            min={VOYAGER1_LAUNCH}
-            max={endDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="w-full rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/80 focus:outline-none focus:border-blue-500/60"
-          />
-        </label>
-        <label className="space-y-1">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpenPicker(openPicker === "start" ? null : "start")}
+              className={dateBtnCls(openPicker === "start")}
+            >
+              {formatDateRU(startDate)}
+            </button>
+            {openPicker === "start" && (
+              <PopupDatePicker value={startDate} onChange={setStartDate} onClose={() => setOpenPicker(null)} />
+            )}
+          </div>
+        </div>
+        {/* End date */}
+        <div className="space-y-1">
           <span className="text-xs text-white/50">Конечная дата</span>
-          <input
-            type="date"
-            value={endDate}
-            min={startDate}
-            max={todayISO()}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="w-full rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/80 focus:outline-none focus:border-blue-500/60"
-          />
-        </label>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpenPicker(openPicker === "end" ? null : "end")}
+              className={dateBtnCls(openPicker === "end")}
+            >
+              {formatDateRU(endDate)}
+            </button>
+            {openPicker === "end" && (
+              <PopupDatePicker value={endDate} onChange={setEndDate} onClose={() => setOpenPicker(null)} align="right" />
+            )}
+          </div>
+        </div>
       </div>
 
       {error && (

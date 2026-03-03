@@ -5,7 +5,7 @@ export interface UserProfile {
   name: string | null;
   image: string | null;
   role: "user" | "admin";
-  subscription_status: "free" | "premium";
+  subscription_status: "free" | "premium" | "elite";
   subscription_start: string | null;
   subscription_end: string | null;
   stripe_customer_id: string | null;
@@ -92,7 +92,8 @@ export interface ProcessedRate {
 
 // ─── Stripe ───────────────────────────────────────────────────────────────────
 export interface SubscriptionPlan {
-  id: "monthly" | "annual";
+  id: "premium-monthly" | "premium-annual" | "elite-monthly" | "elite-annual";
+  tier: "premium" | "elite";
   name: string;
   price: number;
   interval: "month" | "year";

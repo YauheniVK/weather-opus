@@ -3,19 +3,21 @@ import { getAdminClient } from "@/lib/supabase";
 import { AdminUsersTable } from "@/components/admin/users-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Crown, Shield, Ban } from "lucide-react";
+import { Users, Crown, Gem, Shield, Ban } from "lucide-react";
 
 async function getStats() {
   const db = getAdminClient();
-  const [total, premium, admins, blocked] = await Promise.all([
+  const [total, premium, elite, admins, blocked] = await Promise.all([
     db.from("profiles").select("*", { count: "exact", head: true }),
     db.from("profiles").select("*", { count: "exact", head: true }).eq("subscription_status", "premium"),
+    db.from("profiles").select("*", { count: "exact", head: true }).eq("subscription_status", "elite"),
     db.from("profiles").select("*", { count: "exact", head: true }).eq("role", "admin"),
     db.from("profiles").select("*", { count: "exact", head: true }).eq("is_blocked", true),
   ]);
   return {
     total: total.count ?? 0,
     premium: premium.count ?? 0,
+    elite: elite.count ?? 0,
     admins: admins.count ?? 0,
     blocked: blocked.count ?? 0,
   };
@@ -26,7 +28,8 @@ export default async function AdminPage() {
 
   const statCards = [
     { title: "Total Users",    value: stats.total,   icon: <Users  className="h-5 w-5 text-blue-400"   />, description: "All registered accounts"  },
-    { title: "Premium Users",  value: stats.premium, icon: <Crown  className="h-5 w-5 text-amber-400"  />, description: "Active subscriptions"     },
+    { title: "Premium",        value: stats.premium, icon: <Crown  className="h-5 w-5 text-amber-400"  />, description: "Premium subscriptions"    },
+    { title: "Elite",          value: stats.elite,   icon: <Gem    className="h-5 w-5 text-purple-400" />, description: "Elite subscriptions"      },
     { title: "Admins",         value: stats.admins,  icon: <Shield className="h-5 w-5 text-orange-400" />, description: "Admin role accounts"       },
     { title: "Blocked",        value: stats.blocked, icon: <Ban    className="h-5 w-5 text-red-400"    />, description: "Suspended accounts"        },
   ];
@@ -50,7 +53,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {statCards.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">

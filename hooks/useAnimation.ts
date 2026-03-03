@@ -5,16 +5,22 @@ import type { SpaceDataset, SpacePoint } from "@/types/space";
 
 // ─── Body ID → English name mapping (for SolarSystemMap lookup by planet.nameEn)
 const BODY_EN_NAMES: Record<string, string> = {
-  "199":       "Mercury",
-  "299":       "Venus",
-  "399":       "Earth",
-  "499":       "Mars",
-  "599":       "Jupiter",
-  "699":       "Saturn",
-  "799":       "Uranus",
-  "899":       "Neptune",
-  "Voyager_1": "Voyager 1",
-  "Voyager_2": "Voyager 2",
+  "199":                "Mercury",
+  "299":                "Venus",
+  "399":                "Earth",
+  "499":                "Mars",
+  "599":                "Jupiter",
+  "699":                "Saturn",
+  "799":                "Uranus",
+  "899":                "Neptune",
+  "Pioneer_10":         "Pioneer 10",
+  "Pioneer_11":         "Pioneer 11",
+  "Voyager_1":          "Voyager 1",
+  "Voyager_2":          "Voyager 2",
+  "Cassini":            "Cassini",
+  "MESSENGER":          "MESSENGER",
+  "New_Horizons":       "New Horizons",
+  "Parker_Solar_Probe": "Parker Solar Probe",
 };
 
 // ─── Public API ────────────────────────────────────────────────────────────────
@@ -156,14 +162,22 @@ export function useAnimation(dataset: SpaceDataset | null): AnimationState {
     return map;
   }, [dataset, dayIndex, totalSteps]);
 
+  // The body with the most points — same one that sets totalSteps.
+  // Must be used for currentDate and seekToDate so they stay in sync with the slider.
+  const longestBody = useMemo(
+    () => dataset?.bodies.reduce(
+      (best, b) => b.points.length > best.points.length ? b : best,
+      dataset.bodies[0],
+    ) ?? null,
+    [dataset],
+  );
+
   // ── Current date string ─────────────────────────────────────────────────────
   const currentDate = useMemo((): string => {
-    if (!dataset || totalSteps === 0) return "";
-    const ref = dataset.bodies.find((b) => b.points.length > 0);
-    if (!ref) return "";
-    const idx = Math.min(Math.floor(dayIndex), ref.points.length - 1);
-    return ref.points[idx].date;
-  }, [dataset, dayIndex, totalSteps]);
+    if (!longestBody || longestBody.points.length === 0) return "";
+    const idx = Math.min(Math.floor(dayIndex), longestBody.points.length - 1);
+    return longestBody.points[idx].date;
+  }, [longestBody, dayIndex]);
 
   // ── Progress ────────────────────────────────────────────────────────────────
   const progress = useMemo(
@@ -188,15 +202,13 @@ export function useAnimation(dataset: SpaceDataset | null): AnimationState {
 
   const seekToDate = useCallback(
     (iso: string) => {
-      if (!dataset) return;
-      const ref = dataset.bodies.find((b) => b.points.length > 0);
-      if (!ref) return;
-      const idx     = ref.points.findIndex((p) => p.date >= iso);
-      const clamped = idx === -1 ? ref.points.length - 1 : idx;
+      if (!longestBody || longestBody.points.length === 0) return;
+      const idx     = longestBody.points.findIndex((p) => p.date >= iso);
+      const clamped = idx === -1 ? longestBody.points.length - 1 : idx;
       dayRef.current = clamped;
       setDayIndex(clamped);
     },
-    [dataset],
+    [longestBody],
   );
 
   const seekToProgress = useCallback(
