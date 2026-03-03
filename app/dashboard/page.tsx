@@ -29,7 +29,7 @@ const WeatherMapDynamic = dynamic(
 );
 
 function DashboardContent() {
-  const { tier, isPremium, isElite, refresh } = useProfile();
+  const { tier, isPremium, isElite, refresh, loading: profileLoading } = useProfile();
   const searchParams = useSearchParams();
 
   // ─── Weather state ────────────────────────────────────────────────────────
@@ -135,6 +135,16 @@ function DashboardContent() {
   const handleTabChange = (value: string) => {
     if (value === "space") fetchApod();
   };
+
+  // Wait for profile before rendering — prevents flash of free-tier UI
+  if (profileLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-10 w-56 rounded-lg bg-muted animate-pulse" />
+        <div className="h-[480px] rounded-xl bg-muted animate-pulse" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
